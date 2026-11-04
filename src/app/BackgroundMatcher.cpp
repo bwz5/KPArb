@@ -125,6 +125,10 @@ void BackgroundMatcher::run()
         const MatcherProgress& summary = matcher->lastProgress();
         std::cout << "matching finished: candidates=" << summary.candidatesTotal << " processed=" << summary.candidatesProcessed
                   << " language model requests=" << summary.languageModelRequests << " accepted pairs=" << acceptedPairCount() << '\n';
+        if (summary.isLanguageModelDisabled) {
+            std::cout << "language model was disabled for this cycle after " << config.matcher.maximumConsecutiveFailures
+                      << " consecutive failures; the next cycle will retry\n";
+        }
     } catch (const std::exception& error) {
         std::cerr << "matching failed: " << error.what() << '\n';
     }

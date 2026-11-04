@@ -159,6 +159,35 @@ TEST_F(MarketMatcherTest, PromptNamesBothOutcomes)
     EXPECT_NE(messages[1].content.find("JSON"), std::string::npos);
 }
 
+class FailingLanguageModel final : public LanguageModelClient {
+public:
+    LanguageModelResponse complete(const std::vector<ChatMessage>&) override
+    {
+        ++requestCount;
+        return {false, "", "HTTP 429 rate limited"};
+    }
+
+    std::string modelName() const override
+    {
+        return "failing-model";
+    }
+
+    int requestCount = 0;
+};
+
+TEST_F(MarketMatcherTest, RepeatedFailuresDisableTheLanguageModel)
+{
+    settings.maximumConsecutiveFailures = 2;
+    store->load();
+    FailingLanguageModel failing;
+    MarketMatcher matcher(settings, failing, *store, *channel);
+    const auto pairs = matcher.match(kalshi, polymarket);
+    EXPECT_TRUE(pairs.empty());
+    EXPECT_EQ(failing.requestCount, 2);
+    EXPECT_TRUE(matcher.lastProgress().isLanguageModelDisabled);
+    EXPECT_EQ(store->verdictCount(), 0U);
+}
+
 TEST(VerdictParsingTest, ToleratesFormattingVariations)
 {
     EXPECT_FALSE(MarketMatcher::parseVerdict("no json here").has_value());

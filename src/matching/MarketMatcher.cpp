@@ -171,6 +171,7 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
     std::vector<MatchedPair> pairs;
     std::set<std::pair<std::string, std::string>> accepted;
     std::size_t unsavedVerdicts = 0;
+    std::size_t consecutiveFailures = 0;
 
     for (const CandidatePair& candidate : candidates) {
         if (stopRequested.load(std::memory_order_acquire)) {
@@ -189,7 +190,7 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
             logEvent(MatchEventCode::VerdictFromCache, static_cast<std::int64_t>(candidate.kalshiIndex),
                 static_cast<std::int64_t>(candidate.polymarketIndex), verdict->isSameEvent ? 1 : 0);
         } else {
-            if (progress.languageModelRequests >= settings.maximumLanguageModelRequests) {
+            if (progress.isLanguageModelDisabled || progress.languageModelRequests >= settings.maximumLanguageModelRequests) {
                 continue;
             }
             ++progress.languageModelRequests;
@@ -197,6 +198,9 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
             if (!response.succeeded) {
                 logEvent(MatchEventCode::LanguageModelFailure, static_cast<std::int64_t>(candidate.kalshiIndex),
                     static_cast<std::int64_t>(candidate.polymarketIndex), similarityPermille);
+                if (++consecutiveFailures >= settings.maximumConsecutiveFailures) {
+                    progress.isLanguageModelDisabled = true;
+                }
                 MatchVerdict failed;
                 failed.reason = "error: " + response.errorMessage;
                 if (onProgress) {
@@ -204,6 +208,7 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
                 }
                 continue;
             }
+            consecutiveFailures = 0;
             verdict = parseVerdict(response.content);
             if (!verdict) {
                 logEvent(MatchEventCode::LanguageModelFailure, static_cast<std::int64_t>(candidate.kalshiIndex),

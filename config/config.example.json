@@ -44,6 +44,8 @@
     "requireCompatibleNumbers": true,
     "minimumConfidence": 0.85,
     "maximumLanguageModelRequests": 1500,
+    "maximumRulesCharacters": 800,
+    "maximumConsecutiveFailures": 5,
     "cachePath": "data/match_cache.json",
     "manualMatchesPath": "data/manual_matches.json",
     "matchedPairsPath": "data/matched_pairs.json"

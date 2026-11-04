@@ -80,6 +80,8 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readInto(matching, "requireCompatibleNumbers", config.matcher.candidates.requireCompatibleNumbers);
     readInto(matching, "minimumConfidence", config.matcher.minimumConfidence);
     readInto(matching, "maximumLanguageModelRequests", config.matcher.maximumLanguageModelRequests);
+    readInto(matching, "maximumRulesCharacters", config.matcher.maximumRulesCharacters);
+    readInto(matching, "maximumConsecutiveFailures", config.matcher.maximumConsecutiveFailures);
     readPathInto(matching, "cachePath", config.matchCachePath);
     readPathInto(matching, "manualMatchesPath", config.manualMatchesPath);
     readPathInto(matching, "matchedPairsPath", config.matchedPairsPath);

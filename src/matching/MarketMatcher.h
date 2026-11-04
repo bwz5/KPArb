@@ -22,7 +22,8 @@ struct MatcherSettings {
     double minimumConfidence = 0.85;
     std::size_t maximumLanguageModelRequests = 1500;
     std::size_t saveInterval = 20;
-    std::size_t maximumRulesCharacters = 1500;
+    std::size_t maximumRulesCharacters = 800;
+    std::size_t maximumConsecutiveFailures = 5;
 };
 
 struct MatcherProgress {
@@ -30,6 +31,7 @@ struct MatcherProgress {
     std::size_t candidatesProcessed = 0;
     std::size_t languageModelRequests = 0;
     std::size_t pairsAccepted = 0;
+    bool isLanguageModelDisabled = false;
 };
 
 class MarketMatcher {

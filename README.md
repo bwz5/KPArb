@@ -10,6 +10,18 @@ Detects arbitrage between equivalent Kalshi and Polymarket binary markets. It on
    `edge = $1 - kalshiAsk - polymarketAsk - kalshiFee - polymarketFee`
 4. **Binary logging** (`src/logging`) writes fixed 64-byte records. A background thread drains them to `data/logs/*.bin`. Decode them with `kparb_logdecode`.
 
+### Discovery cycles
+
+- Only markets that resolve within `discovery.maximumDaysUntilResolution` are considered (default 2 days). For Kalshi this is `expected_expiration_time`; for Polymarket it is `endDate`.
+- Matching runs on a background thread. Streaming starts once `pairsBeforeStreaming` pairs (default 500) are matched, or once matching finishes, whichever comes first.
+- Matching keeps running while the stream is live. The stream restarts with the larger pair set each time another `pairsBetweenStreamRestarts` pairs (default 250) are matched, and once more when matching finishes.
+- Discovery and matching rerun every `rematchIntervalMinutes` (default 60) so new short-dated markets get picked up. Cached verdicts make later cycles cheap.
+- After `maximumConsecutiveFailures` LLM errors in a row, for example an exhausted rate-limit quota, the LLM is skipped until the next cycle.
+
+### Sizing
+
+For each crossed pair, the engine walks both ask ladders together, taking `min(remaining Kalshi quantity, remaining Polymarket quantity)` at each step. It stops when the marginal edge drops below `minimumEdgeTicks`, a book runs out, or `maximumDepthLevels` is reached. The reported size is the largest quantity at which every contract still clears the minimum edge. It does not apply balance, position or minimum-order-size limits.
+
 ### Hot path guarantees
 
 - The feeds hand updates to the engine through single-producer/single-consumer rings. Pushes and pops are wait-free: there are no locks or compare-and-swap loops, and a full ring never blocks a producer.
@@ -29,6 +41,20 @@ ctest --preset release
 ```
 
 The `debug`, `asan` and `tsan` presets also exist.
+
+### Benchmark (Apple M2, release build)
+
+The benchmark compares a quiet market, where pair costs are around $1.06 and arbitrage is rare, with a stressed market, where costs sit around $1.00 so pairs are constantly crossed and every update re-runs the depth walk.
+
+| Scenario | Pairs | Prefetch off | Prefetch on |
+|---|---|---|---|
+| Quiet, direct apply | 2,000 | 11.9 ns/update | 11.9 ns/update |
+| Quiet, through SPSC queue | 2,000 | 12.7 ns/update | 13.3 ns/update |
+| Quiet, direct apply | 20,000 | 26.8 ns/update | 19.0 ns/update |
+| Quiet, through SPSC queue | 20,000 | 30.5 ns/update | 19.9 ns/update |
+| Stressed, direct apply | 2,000 | 224 ns/update | 221 ns/update |
+
+At 2,000 pairs the data the engine touches fits in L2, so prefetching has nothing to hide. Once the working set outgrows the cache, prefetching makes updates 1.4–1.5× faster. Run it with `kparb_engine_benchmark [pairCount]`.
 
 ## Configure
 

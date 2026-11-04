@@ -2,6 +2,7 @@
 #include "common/Clock.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <atomic>
 #include <cstdint>
 #include <iomanip>
@@ -15,15 +16,21 @@ namespace {
 
 using namespace kparb;
 
-constexpr std::uint32_t pairCount = 2000;
+std::uint32_t pairCount = 2000;
 constexpr std::size_t updateCount = 4'000'000;
 constexpr int repetitionCount = 5;
 
-std::vector<LadderUpdate> generateUpdates()
+struct Scenario {
+    const char* name;
+    double meanAskPrice;
+    double priceDeviation;
+};
+
+std::vector<LadderUpdate> generateUpdates(const Scenario& scenario)
 {
     std::mt19937_64 generator(42);
     std::uniform_int_distribution<std::uint32_t> ladderDistribution(0, pairCount * laddersPerPair - 1);
-    std::normal_distribution<double> priceDistribution(500.0, 60.0);
+    std::normal_distribution<double> priceDistribution(scenario.meanAskPrice, scenario.priceDeviation);
     std::uniform_int_distribution<std::int32_t> quantityDistribution(0, 5000);
     std::bernoulli_distribution removalDistribution(0.25);
 
@@ -117,14 +124,10 @@ double measureThroughQueue(const std::vector<LadderUpdate>& updates)
     return best;
 }
 
-}
-
-int main()
+void runScenario(const Scenario& scenario)
 {
-    const auto updates = generateUpdates();
-    std::cout << std::fixed << std::setprecision(2);
-    std::cout << "pairs=" << pairCount << " ladders=" << pairCount * laddersPerPair << " updates=" << updates.size()
-              << " ladder_bytes=" << sizeof(AskLadder) << "\n\n";
+    const auto updates = generateUpdates(scenario);
+    std::cout << "=== " << scenario.name << ": asks ~ N(" << scenario.meanAskPrice << ", " << scenario.priceDeviation << ") ticks\n";
 
     std::cout << "direct apply, prefetch off\n";
     const double directWithout = measureDirectApply<false>(updates);
@@ -140,6 +143,20 @@ int main()
     const double queueWith = measureThroughQueue<true>(updates);
     std::cout << "  " << queueWith << " ns/update\n";
 
-    std::cout << "\nprefetch speedup direct: " << directWithout / directWith << "x, queue: " << queueWithout / queueWith << "x\n";
+    std::cout << "prefetch speedup direct: " << directWithout / directWith << "x, queue: " << queueWithout / queueWith << "x\n\n";
+}
+
+}
+
+int main(int argumentCount, char** arguments)
+{
+    if (argumentCount > 1) {
+        pairCount = static_cast<std::uint32_t>(std::strtoul(arguments[1], nullptr, 10));
+    }
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "pairs=" << pairCount << " ladders=" << pairCount * laddersPerPair << " updates=" << updateCount
+              << " ladder_bytes=" << sizeof(AskLadder) << "\n\n";
+    runScenario(Scenario{"quiet market (pair cost ~$1.06, arbs rare)", 530.0, 12.0});
+    runScenario(Scenario{"stressed market (pair cost ~$1.00, arbs constant)", 500.0, 60.0});
     return 0;
 }
