@@ -34,8 +34,9 @@ TEST(CatalogParsingTest, ParsesKalshiBinaryMarketsAndCursor)
 TEST(CatalogParsingTest, ParsesOnlyOpenBinaryPolymarketMarkets)
 {
     std::vector<MarketInfo> markets;
-    const std::size_t entries = parsePolymarketMarketsPage(readFixture("polymarket_markets_page.json"), markets);
-    EXPECT_EQ(entries, 3U);
+    const PolymarketPage page = parsePolymarketMarketsPage(readFixture("polymarket_markets_page.json"), markets);
+    EXPECT_EQ(page.entryCount, 3U);
+    EXPECT_TRUE(page.nextCursor.empty());
     ASSERT_EQ(markets.size(), 1U);
     const MarketInfo& market = markets[0];
     EXPECT_EQ(market.identifier, "0xabc123");
@@ -47,6 +48,17 @@ TEST(CatalogParsingTest, ParsesOnlyOpenBinaryPolymarketMarkets)
     EXPECT_EQ(market.closeTimeSeconds, 1796774400);
     EXPECT_DOUBLE_EQ(market.takerFeeRate, 0.04);
     EXPECT_DOUBLE_EQ(market.takerFeeExponent, 1.0);
+}
+
+TEST(CatalogParsingTest, ParsesPolymarketKeysetEnvelope)
+{
+    std::vector<MarketInfo> markets;
+    const std::string body = R"({"markets":[{"question":"Q","conditionId":"0x1","outcomes":"[\"Yes\",\"No\"]","clobTokenIds":"[\"a\",\"b\"]"}],"next_cursor":"abc"})";
+    const PolymarketPage page = parsePolymarketMarketsPage(body, markets);
+    EXPECT_EQ(page.entryCount, 1U);
+    EXPECT_EQ(page.nextCursor, "abc");
+    ASSERT_EQ(markets.size(), 1U);
+    EXPECT_EQ(markets[0].noTokenIdentifier, "b");
 }
 
 }

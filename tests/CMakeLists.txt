@@ -6,7 +6,7 @@ list(APPEND KPARB_TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/AllocationCounter.cpp
 add_executable(kparb_tests ${KPARB_TEST_SOURCES})
 target_link_libraries(kparb_tests PRIVATE kparb_build_options GTest::gtest_main OpenSSL::Crypto nlohmann_json::nlohmann_json)
 
-foreach(library kparb_common kparb_logging kparb_arbitrage kparb_ingestion kparb_matching)
+foreach(library kparb_common kparb_logging kparb_arbitrage kparb_ingestion kparb_matching kparb_application)
     if(TARGET ${library})
         target_link_libraries(kparb_tests PRIVATE ${library})
     endif()

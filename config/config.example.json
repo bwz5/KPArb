@@ -1,0 +1,63 @@
+{
+  "environment": {
+    "file": ".env",
+    "kalshiKeyIdentifierVariable": "KALSHI_API_KEY_ID",
+    "kalshiPrivateKeyVariable": "KALSHI_PRIVATE_KEY",
+    "kalshiPrivateKeyPathVariable": "KALSHI_PRIVATE_KEY_PATH",
+    "languageModelApiKeyVariable": "KPARB_LLM_API_KEY"
+  },
+  "kalshi": {
+    "restBaseUrl": "https://api.elections.kalshi.com/trade-api/v2",
+    "webSocketUrl": "wss://api.elections.kalshi.com/trade-api/ws/v2",
+    "pageLimit": 1000,
+    "maximumPages": 500,
+    "excludeMultivariateMarkets": true,
+    "tickersPerSubscription": 100,
+    "takerFeeRate": 0.07
+  },
+  "polymarket": {
+    "gammaBaseUrl": "https://gamma-api.polymarket.com",
+    "webSocketUrl": "wss://ws-subscriptions-clob.polymarket.com/ws/market",
+    "pageLimit": 100,
+    "maximumPages": 2000,
+    "tokensPerSubscription": 500,
+    "textPingIntervalSeconds": 10
+  },
+  "languageModel": {
+    "baseUrl": "https://api.groq.com/openai/v1",
+    "model": "llama-3.3-70b-versatile",
+    "requestsPerMinute": 25,
+    "maximumAttempts": 6,
+    "requestJsonObject": true
+  },
+  "discovery": {
+    "maximumDaysUntilResolution": 2,
+    "kalshiCloseTimeSearchDays": 21,
+    "rematchIntervalMinutes": 60,
+    "pairsBeforeStreaming": 500,
+    "pairsBetweenStreamRestarts": 250
+  },
+  "matching": {
+    "candidatesPerMarket": 2,
+    "minimumSimilarity": 0.45,
+    "maximumCloseTimeDifferenceDays": 2,
+    "requireCompatibleNumbers": true,
+    "minimumConfidence": 0.85,
+    "maximumLanguageModelRequests": 1500,
+    "cachePath": "data/match_cache.json",
+    "manualMatchesPath": "data/manual_matches.json",
+    "matchedPairsPath": "data/matched_pairs.json"
+  },
+  "arbitrage": {
+    "minimumEdgeTicks": 5,
+    "maximumQuoteAgeMilliseconds": 0,
+    "maximumDepthLevels": 32,
+    "statsIntervalSeconds": 10,
+    "maximumPairs": 5000
+  },
+  "logging": {
+    "directory": "data/logs",
+    "printFeedEvents": true,
+    "printEngineStats": true
+  }
+}

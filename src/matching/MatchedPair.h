@@ -18,6 +18,7 @@ struct MatchedPair {
     std::string kalshiTicker;
     std::string kalshiTitle;
     std::string polymarketIdentifier;
+    std::string polymarketSlug;
     std::string polymarketTitle;
     std::string polymarketYesToken;
     std::string polymarketNoToken;

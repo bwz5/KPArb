@@ -17,6 +17,8 @@ struct KalshiCatalogSettings {
     std::size_t pageLimit = 1000;
     std::size_t maximumPages = 500;
     bool excludeMultivariateMarkets = true;
+    std::int64_t minimumCloseTimestamp = 0;
+    std::int64_t maximumCloseTimestamp = 0;
 };
 
 class KalshiMarketCatalog {

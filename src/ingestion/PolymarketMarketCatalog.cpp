@@ -1,6 +1,7 @@
 #include "ingestion/PolymarketMarketCatalog.h"
 
 #include "common/TimeParsing.h"
+#include "ingestion/UrlEncoding.h"
 
 #include <nlohmann/json.hpp>
 
@@ -56,19 +57,24 @@ std::vector<std::string> readEmbeddedStringArray(const nlohmann::json& object, c
 
 }
 
-std::size_t parsePolymarketMarketsPage(std::string_view body, std::vector<MarketInfo>& markets)
+PolymarketPage parsePolymarketMarketsPage(std::string_view body, std::vector<MarketInfo>& markets)
 {
+    PolymarketPage page;
     const auto document = nlohmann::json::parse(body);
     const nlohmann::json* marketList = &document;
     if (document.is_object()) {
-        const auto data = document.find("data");
-        if (data == document.end()) {
-            return 0;
+        page.nextCursor = readString(document, "next_cursor");
+        auto found = document.find("markets");
+        if (found == document.end()) {
+            found = document.find("data");
         }
-        marketList = &*data;
+        if (found == document.end()) {
+            return page;
+        }
+        marketList = &*found;
     }
     if (!marketList->is_array()) {
-        return 0;
+        return page;
     }
     for (const auto& market : *marketList) {
         if (!readBoolean(market, "enableOrderBook", true) || readBoolean(market, "closed", false)
@@ -105,7 +111,8 @@ std::size_t parsePolymarketMarketsPage(std::string_view body, std::vector<Market
         }
         markets.push_back(std::move(info));
     }
-    return marketList->size();
+    page.entryCount = marketList->size();
+    return page;
 }
 
 PolymarketMarketCatalog::PolymarketMarketCatalog(PolymarketCatalogSettings catalogSettings, HttpClient& httpClient)
@@ -118,9 +125,19 @@ std::vector<MarketInfo> PolymarketMarketCatalog::fetchOpenMarkets(const Progress
 {
     using namespace std::chrono_literals;
     std::vector<MarketInfo> markets;
+    std::string cursor;
     for (std::size_t page = 0; page < settings.maximumPages; ++page) {
-        const std::string url = settings.gammaBaseUrl + "/markets?active=true&closed=false&archived=false&limit="
-            + std::to_string(settings.pageLimit) + "&offset=" + std::to_string(page * settings.pageLimit);
+        std::string url = settings.gammaBaseUrl + "/markets/keyset?active=true&closed=false&archived=false&limit="
+            + std::to_string(settings.pageLimit);
+        if (settings.minimumEndTimestamp > 0) {
+            url += "&end_date_min=" + encodeUrlComponent(formatIsoTimestampSeconds(settings.minimumEndTimestamp));
+        }
+        if (settings.maximumEndTimestamp > 0) {
+            url += "&end_date_max=" + encodeUrlComponent(formatIsoTimestampSeconds(settings.maximumEndTimestamp));
+        }
+        if (!cursor.empty()) {
+            url += "&after_cursor=" + encodeUrlComponent(cursor);
+        }
         HttpResponse response;
         for (int attempt = 0; attempt < 5; ++attempt) {
             response = client.get(url);
@@ -135,13 +152,14 @@ std::vector<MarketInfo> PolymarketMarketCatalog::fetchOpenMarkets(const Progress
             throw std::runtime_error("Polymarket markets request failed with status " + std::to_string(response.statusCode)
                 + ": " + response.errorMessage + " " + response.body.substr(0, 300));
         }
-        const std::size_t entriesOnPage = parsePolymarketMarketsPage(response.body, markets);
+        const PolymarketPage parsed = parsePolymarketMarketsPage(response.body, markets);
         if (onProgress) {
             onProgress(page + 1, markets.size());
         }
-        if (entriesOnPage < settings.pageLimit) {
+        if (parsed.entryCount == 0 || parsed.nextCursor.empty() || parsed.nextCursor == cursor) {
             break;
         }
+        cursor = parsed.nextCursor;
         std::this_thread::sleep_for(100ms);
     }
     return markets;

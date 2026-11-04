@@ -15,7 +15,7 @@
 namespace kparb {
 
 struct EngineSettings {
-    std::int32_t minimumEdgeTicks = 1;
+    std::int32_t minimumEdgeTicks = 5;
     std::int64_t maximumQuoteAgeNanos = 0;
     std::uint32_t maximumDepthLevels = 32;
     std::int64_t statsIntervalNanos = 10'000'000'000;

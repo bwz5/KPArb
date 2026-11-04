@@ -19,7 +19,7 @@ struct CandidatePair {
 struct CandidateSettings {
     std::size_t candidatesPerMarket = 2;
     double minimumSimilarity = 0.45;
-    std::int64_t maximumCloseTimeDifferenceSeconds = 14 * 86400;
+    std::int64_t maximumCloseTimeDifferenceSeconds = 2 * 86400;
     double maximumDocumentFrequencyFraction = 0.05;
     std::size_t minimumDocumentFrequencyCap = 50;
     bool requireCompatibleNumbers = true;

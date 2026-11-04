@@ -85,6 +85,12 @@ std::vector<MarketInfo> KalshiMarketCatalog::fetchOpenMarkets(const ProgressCall
         if (settings.excludeMultivariateMarkets) {
             url += "&mve_filter=exclude";
         }
+        if (settings.minimumCloseTimestamp > 0) {
+            url += "&min_close_ts=" + std::to_string(settings.minimumCloseTimestamp);
+        }
+        if (settings.maximumCloseTimestamp > 0) {
+            url += "&max_close_ts=" + std::to_string(settings.maximumCloseTimestamp);
+        }
         if (!cursor.empty()) {
             url += "&cursor=" + encodeUrlComponent(cursor);
         }

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace kparb {
@@ -9,5 +10,7 @@ namespace kparb {
 std::optional<std::int64_t> parseIsoTimestampSeconds(std::string_view text);
 
 std::int64_t daysFromCivil(std::int64_t year, unsigned month, unsigned day);
+
+std::string formatIsoTimestampSeconds(std::int64_t epochSeconds);
 
 }

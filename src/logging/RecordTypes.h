@@ -13,6 +13,7 @@ enum class SourceIdentifier : std::uint16_t {
     Engine = 1,
     KalshiFeed = 2,
     PolymarketFeed = 3,
+    Matcher = 4,
 };
 
 enum class PairNameField : std::uint8_t {

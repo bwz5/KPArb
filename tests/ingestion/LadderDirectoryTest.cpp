@@ -52,6 +52,9 @@ TEST(LadderDirectoryTest, UrlHelpers)
     EXPECT_EQ(extractUrlPath("https://host/path?query=1"), "/path");
     EXPECT_EQ(extractUrlPath("https://host"), "/");
     EXPECT_EQ(encodeUrlComponent("a+b=c/d"), "a%2Bb%3Dc%2Fd");
+    EXPECT_EQ(extractUrlOrigin("wss://api.elections.kalshi.com/trade-api/ws/v2"), "https://api.elections.kalshi.com");
+    EXPECT_EQ(extractUrlOrigin("https://host:443/path"), "https://host");
+    EXPECT_EQ(extractUrlOrigin("http://host:8080/path"), "http://host:8080");
 }
 
 }

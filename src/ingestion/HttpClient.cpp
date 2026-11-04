@@ -1,5 +1,7 @@
 #include "ingestion/HttpClient.h"
 
+#include "ingestion/UrlEncoding.h"
+
 #include <ixwebsocket/IXHttpClient.h>
 
 #include <cstdlib>
@@ -25,9 +27,10 @@ HttpResponse convertResponse(const ix::HttpResponsePtr& response)
     return converted;
 }
 
-ix::HttpRequestArgsPtr createArguments(ix::HttpClient& client, const HttpHeaders& headers)
+ix::HttpRequestArgsPtr createArguments(ix::HttpClient& client, const std::string& url, const HttpHeaders& headers)
 {
     auto arguments = client.createRequest();
+    arguments->extraHeaders["Origin"] = extractUrlOrigin(url);
     arguments->connectTimeout = 15;
     arguments->transferTimeout = 120;
     arguments->followRedirects = true;
@@ -51,12 +54,12 @@ HttpClient::~HttpClient() = default;
 
 HttpResponse HttpClient::get(const std::string& url, const HttpHeaders& headers)
 {
-    return convertResponse(client->get(url, createArguments(*client, headers)));
+    return convertResponse(client->get(url, createArguments(*client, url, headers)));
 }
 
 HttpResponse HttpClient::post(const std::string& url, const std::string& body, const HttpHeaders& headers)
 {
-    auto arguments = createArguments(*client, headers);
+    auto arguments = createArguments(*client, url, headers);
     if (arguments->extraHeaders.find("Content-Type") == arguments->extraHeaders.end()) {
         arguments->extraHeaders["Content-Type"] = "application/json";
     }

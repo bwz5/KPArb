@@ -8,6 +8,7 @@
 #include "matching/MatchStore.h"
 #include "matching/MatchedPair.h"
 
+#include <atomic>
 #include <functional>
 #include <optional>
 #include <string>
@@ -35,14 +36,19 @@ class MarketMatcher {
 public:
     using ProgressCallback = std::function<void(const MatcherProgress&, const MarketInfo& kalshiMarket,
         const MarketInfo& polymarketMarket, const MatchVerdict& verdict)>;
+    using PairCallback = std::function<void(const MatchedPair&)>;
 
     MarketMatcher(MatcherSettings matcherSettings, LanguageModelClient& languageModel, MatchStore& matchStore, LogChannel& eventChannel);
 
     std::vector<MatchedPair> match(const std::vector<MarketInfo>& kalshiMarkets, const std::vector<MarketInfo>& polymarketMarkets,
-        const ProgressCallback& onProgress = {});
+        const ProgressCallback& onProgress = {}, const PairCallback& onPairAccepted = {});
+
+    void requestStop() noexcept;
 
     std::vector<ChatMessage> buildMessages(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) const;
     static std::optional<MatchVerdict> parseVerdict(std::string_view content);
+
+    const MatcherProgress& lastProgress() const noexcept;
 
 private:
     void logEvent(MatchEventCode code, std::int64_t first = 0, std::int64_t second = 0, std::int64_t third = 0) noexcept;
@@ -52,6 +58,8 @@ private:
     LanguageModelClient& model;
     MatchStore& store;
     LogChannel& channel;
+    MatcherProgress progress;
+    std::atomic<bool> stopRequested{false};
 };
 
 }

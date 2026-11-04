@@ -119,8 +119,8 @@ std::vector<PairNameRecord> makePairNameRecords(std::uint32_t pairIndex, PairNam
 void PairNameDirectory::absorb(const PairNameRecord& record)
 {
     auto& parts = chunks[{record.pairIndex, record.field}];
-    if (parts.size() < record.chunkCount) {
-        parts.resize(record.chunkCount);
+    if (record.chunkIndex == 0 || parts.size() != record.chunkCount) {
+        parts.assign(record.chunkCount, std::string());
     }
     if (record.chunkIndex < parts.size()) {
         const std::size_t length = strnlen(record.text, pairNameChunkCapacity);

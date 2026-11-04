@@ -10,12 +10,19 @@
 
 namespace kparb {
 
-std::size_t parsePolymarketMarketsPage(std::string_view body, std::vector<MarketInfo>& markets);
+struct PolymarketPage {
+    std::size_t entryCount = 0;
+    std::string nextCursor;
+};
+
+PolymarketPage parsePolymarketMarketsPage(std::string_view body, std::vector<MarketInfo>& markets);
 
 struct PolymarketCatalogSettings {
     std::string gammaBaseUrl = "https://gamma-api.polymarket.com";
-    std::size_t pageLimit = 500;
-    std::size_t maximumPages = 400;
+    std::size_t pageLimit = 100;
+    std::size_t maximumPages = 2000;
+    std::int64_t minimumEndTimestamp = 0;
+    std::int64_t maximumEndTimestamp = 0;
 };
 
 class PolymarketMarketCatalog {

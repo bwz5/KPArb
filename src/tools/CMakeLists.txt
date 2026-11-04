@@ -1,0 +1,2 @@
+add_executable(kparb_logdecode LogDecoder.cpp)
+target_link_libraries(kparb_logdecode PRIVATE kparb_logging)

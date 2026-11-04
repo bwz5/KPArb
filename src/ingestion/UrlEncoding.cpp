@@ -22,6 +22,30 @@ std::string encodeUrlComponent(std::string_view text)
     return encoded;
 }
 
+std::string extractUrlOrigin(std::string_view url)
+{
+    const std::size_t schemeEnd = url.find("://");
+    if (schemeEnd == std::string_view::npos) {
+        return {};
+    }
+    std::string scheme(url.substr(0, schemeEnd));
+    if (scheme == "wss") {
+        scheme = "https";
+    } else if (scheme == "ws") {
+        scheme = "http";
+    }
+    const std::size_t hostStart = schemeEnd + 3;
+    const std::size_t hostEnd = url.find_first_of("/?", hostStart);
+    std::string host(url.substr(hostStart, hostEnd == std::string_view::npos ? std::string_view::npos : hostEnd - hostStart));
+    const std::size_t portStart = host.find(':');
+    const bool isDefaultPort = portStart != std::string::npos
+        && ((scheme == "https" && host.substr(portStart) == ":443") || (scheme == "http" && host.substr(portStart) == ":80"));
+    if (isDefaultPort) {
+        host.erase(portStart);
+    }
+    return scheme + "://" + host;
+}
+
 std::string extractUrlPath(std::string_view url)
 {
     const std::size_t schemeEnd = url.find("://");

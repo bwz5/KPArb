@@ -1,6 +1,7 @@
 #include "ingestion/WebSocketBookFeed.h"
 
 #include "common/Clock.h"
+#include "ingestion/UrlEncoding.h"
 
 #include <ixwebsocket/IXWebSocket.h>
 
@@ -88,6 +89,7 @@ void WebSocketBookFeed::supervise()
 
     while (!stopRequested.load(std::memory_order_acquire)) {
         ix::WebSocketHttpHeaders headers;
+        headers["Origin"] = extractUrlOrigin(settings.url);
         try {
             for (auto& [name, value] : connectionHeaders()) {
                 headers[name] = value;

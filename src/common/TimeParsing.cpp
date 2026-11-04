@@ -1,5 +1,7 @@
 #include "common/TimeParsing.h"
 
+#include <cstdio>
+
 namespace kparb {
 
 namespace {
@@ -41,6 +43,32 @@ std::int64_t daysFromCivil(std::int64_t year, unsigned month, unsigned day)
     const unsigned dayOfYear = (153 * shiftedMonth + 2) / 5 + day - 1;
     const unsigned dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear;
     return era * 146097 + static_cast<std::int64_t>(dayOfEra) - 719468;
+}
+
+std::string formatIsoTimestampSeconds(std::int64_t epochSeconds)
+{
+    std::int64_t days = epochSeconds / 86400;
+    std::int64_t secondsOfDay = epochSeconds % 86400;
+    if (secondsOfDay < 0) {
+        secondsOfDay += 86400;
+        --days;
+    }
+    days += 719468;
+    const std::int64_t era = (days >= 0 ? days : days - 146096) / 146097;
+    const auto dayOfEra = static_cast<unsigned>(days - era * 146097);
+    const unsigned yearOfEra = (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365;
+    const std::int64_t year = static_cast<std::int64_t>(yearOfEra) + era * 400;
+    const unsigned dayOfYear = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100);
+    const unsigned shiftedMonth = (5 * dayOfYear + 2) / 153;
+    const unsigned day = dayOfYear - (153 * shiftedMonth + 2) / 5 + 1;
+    const unsigned month = shiftedMonth < 10 ? shiftedMonth + 3 : shiftedMonth - 9;
+    const std::int64_t adjustedYear = year + (month <= 2 ? 1 : 0);
+
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "%04lld-%02u-%02uT%02lld:%02lld:%02lldZ", static_cast<long long>(adjustedYear), month, day,
+        static_cast<long long>(secondsOfDay / 3600), static_cast<long long>((secondsOfDay % 3600) / 60),
+        static_cast<long long>(secondsOfDay % 60));
+    return buffer;
 }
 
 std::optional<std::int64_t> parseIsoTimestampSeconds(std::string_view text)

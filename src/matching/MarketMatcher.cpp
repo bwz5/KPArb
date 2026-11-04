@@ -122,6 +122,11 @@ std::optional<MatchVerdict> MarketMatcher::parseVerdict(std::string_view content
     return verdict;
 }
 
+const MatcherProgress& MarketMatcher::lastProgress() const noexcept
+{
+    return progress;
+}
+
 void MarketMatcher::logEvent(MatchEventCode code, std::int64_t first, std::int64_t second, std::int64_t third) noexcept
 {
     MatchEventRecord event{};
@@ -138,6 +143,7 @@ MatchedPair MarketMatcher::makePair(const MarketInfo& kalshiMarket, const Market
     pair.kalshiTicker = kalshiMarket.identifier;
     pair.kalshiTitle = matchingTextFor(kalshiMarket);
     pair.polymarketIdentifier = polymarketMarket.identifier;
+    pair.polymarketSlug = polymarketMarket.eventIdentifier;
     pair.polymarketTitle = matchingTextFor(polymarketMarket);
     pair.polymarketYesToken = polymarketMarket.yesTokenIdentifier;
     pair.polymarketNoToken = polymarketMarket.noTokenIdentifier;
@@ -148,20 +154,28 @@ MatchedPair MarketMatcher::makePair(const MarketInfo& kalshiMarket, const Market
     return pair;
 }
 
+void MarketMatcher::requestStop() noexcept
+{
+    stopRequested.store(true, std::memory_order_release);
+}
+
 std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kalshiMarkets, const std::vector<MarketInfo>& polymarketMarkets,
-    const ProgressCallback& onProgress)
+    const ProgressCallback& onProgress, const PairCallback& onPairAccepted)
 {
     const CandidateFinder finder(polymarketMarkets, settings.candidates);
     const std::vector<CandidatePair> candidates = finder.findCandidates(kalshiMarkets);
     logEvent(MatchEventCode::CandidatesFound, static_cast<std::int64_t>(candidates.size()));
 
-    MatcherProgress progress;
+    progress = MatcherProgress{};
     progress.candidatesTotal = candidates.size();
     std::vector<MatchedPair> pairs;
     std::set<std::pair<std::string, std::string>> accepted;
     std::size_t unsavedVerdicts = 0;
 
     for (const CandidatePair& candidate : candidates) {
+        if (stopRequested.load(std::memory_order_acquire)) {
+            break;
+        }
         const MarketInfo& kalshiMarket = kalshiMarkets[candidate.kalshiIndex];
         const MarketInfo& polymarketMarket = polymarketMarkets[candidate.polymarketIndex];
         ++progress.candidatesProcessed;
@@ -211,6 +225,9 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
             && accepted.emplace(kalshiMarket.identifier, polymarketMarket.identifier).second) {
             pairs.push_back(makePair(kalshiMarket, polymarketMarket, verdict->isInverted, verdict->confidence));
             ++progress.pairsAccepted;
+            if (onPairAccepted) {
+                onPairAccepted(pairs.back());
+            }
             logEvent(MatchEventCode::PairAccepted, static_cast<std::int64_t>(pairs.size() - 1), similarityPermille,
                 static_cast<std::int64_t>(verdict->confidence * 1000.0));
         }
@@ -231,6 +248,9 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
         polymarketByIdentifier.emplace(market.identifier, &market);
     }
     for (const ManualMatch& manual : store.manualInclusions()) {
+        if (stopRequested.load(std::memory_order_acquire)) {
+            break;
+        }
         const auto kalshiMarket = kalshiByTicker.find(manual.kalshiTicker);
         const auto polymarketMarket = polymarketByIdentifier.find(manual.polymarketIdentifier);
         if (kalshiMarket == kalshiByTicker.end() || polymarketMarket == polymarketByIdentifier.end()) {
@@ -240,6 +260,9 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
             MatchedPair pair = makePair(*kalshiMarket->second, *polymarketMarket->second, manual.isInverted, 1.0);
             pair.isManual = true;
             pairs.push_back(std::move(pair));
+            if (onPairAccepted) {
+                onPairAccepted(pairs.back());
+            }
             logEvent(MatchEventCode::PairAccepted, static_cast<std::int64_t>(pairs.size() - 1), -1, 1000);
         }
     }
