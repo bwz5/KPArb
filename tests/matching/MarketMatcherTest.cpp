@@ -206,7 +206,14 @@ TEST(ChatCompletionsClientTest, BuildsOpenAiCompatibleRequest)
     EXPECT_EQ(body["temperature"], 0);
     EXPECT_EQ(body["messages"].size(), 2U);
     EXPECT_EQ(body["messages"][1]["content"], "u");
-    EXPECT_EQ(body["response_format"]["type"], "json_object");
+    EXPECT_EQ(body["reasoning_effort"], "low");
+    EXPECT_FALSE(body.contains("response_format"));
+
+    settings.requestJsonObject = true;
+    settings.reasoningEffort.clear();
+    const auto jsonModeBody = nlohmann::json::parse(ChatCompletionsClient::buildRequestBody(settings, {{"user", "u"}}));
+    EXPECT_EQ(jsonModeBody["response_format"]["type"], "json_object");
+    EXPECT_FALSE(jsonModeBody.contains("reasoning_effort"));
 }
 
 TEST(ChatCompletionsClientTest, ParsesChoiceContent)

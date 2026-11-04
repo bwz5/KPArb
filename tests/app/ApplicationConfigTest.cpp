@@ -27,7 +27,8 @@ TEST(ApplicationConfigTest, PartialConfigKeepsDefaults)
 {
     const auto config = parseApplicationConfig(R"({"arbitrage":{"minimumEdgeTicks":12}})");
     EXPECT_EQ(config.engine.minimumEdgeTicks, 12);
-    EXPECT_EQ(config.languageModel.model, "llama-3.3-70b-versatile");
+    EXPECT_EQ(config.languageModel.model, "openai/gpt-oss-120b");
+    EXPECT_EQ(config.languageModel.reasoningEffort, "low");
     EXPECT_EQ(config.polymarketFeed.connection.textPingIntervalSeconds, 10);
 }
 

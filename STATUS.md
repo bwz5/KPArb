@@ -7,10 +7,11 @@
 - Polymarket market WebSocket. It connects, subscribes, receives book snapshots and price changes, and sends text pings.
 - Candidate generation. The 2-day window produced 5,524 candidate pairs.
 
-## Blocked on credentials
+## Credentials
 
-- **Kalshi WebSocket returns HTTP 401 with the provided key.** That key is Ed25519. Kalshi API keys are RSA, and requests are signed with RSA-PSS SHA-256. Create a new key under Kalshi → Account & Security → API Keys and put the RSA PEM in `KALSHI_PRIVATE_KEY` (or point `KALSHI_PRIVATE_KEY_PATH` at it). The signer supports both key types and picks the scheme from the key, so no code change is needed.
-- **`KPARB_LLM_API_KEY` is empty.** Without it, only cached verdicts and `data/manual_matches.json` produce pairs.
+- The Kalshi production key works. It is an Ed25519 key, which Kalshi accepts, and the signer picks the scheme from the key. Verified on 2026-11-03: authenticated balance request, plus a live WebSocket stream with subscriptions confirmed and snapshots and deltas applied.
+- Groq works with `openai/gpt-oss-120b`. Groq's JSON mode produces malformed output with this model, so it is turned off; the verdict parser pulls the JSON object out of plain text instead. `reasoning_effort` is set to `low`.
+- Groq free-tier limits seen: 1,000 requests a day and 8,000 tokens a minute. A verification uses about 420 tokens, so the client is paced at 10 requests a minute.
 
 ## Things to know
 

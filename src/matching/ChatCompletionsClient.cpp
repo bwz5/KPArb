@@ -34,6 +34,9 @@ std::string ChatCompletionsClient::buildRequestBody(const ChatCompletionsSetting
     if (settings.requestJsonObject) {
         body["response_format"] = {{"type", "json_object"}};
     }
+    if (!settings.reasoningEffort.empty()) {
+        body["reasoning_effort"] = settings.reasoningEffort;
+    }
     return body.dump();
 }
 
@@ -91,7 +94,7 @@ LanguageModelResponse ChatCompletionsClient::complete(const std::vector<ChatMess
         lastFailure.errorMessage = "HTTP " + std::to_string(response.statusCode) + " " + response.errorMessage + " "
             + response.body.substr(0, 300);
         const bool isRetryable = response.statusCode == 0 || response.statusCode == 429 || response.statusCode >= 500;
-        if (!isRetryable) {
+        if (!isRetryable || response.retryAfterSeconds > settings.maximumRetryAfterSeconds) {
             break;
         }
         const std::int64_t backoffSeconds = response.retryAfterSeconds > 0 ? response.retryAfterSeconds

@@ -5,7 +5,7 @@ Detects arbitrage between equivalent Kalshi and Polymarket binary markets. It on
 ## How it works
 
 1. **Ingestion** (`src/ingestion`) downloads every open binary market from the Kalshi REST API and the Polymarket Gamma API. It then streams order books over the Kalshi WebSocket (signed with your API key) and the Polymarket market WebSocket.
-2. **Matching** (`src/matching`) finds candidate pairs with a TF-IDF index. A candidate must have a close date within a window of the other market's, and numeric thresholds that agree. An open-weights LLM behind an OpenAI-compatible API (Groq by default) then confirms that each pair settles on the same outcome, and which way round the outcomes line up. Every verdict is cached in `data/match_cache.json`.
+2. **Matching** (`src/matching`) finds candidate pairs with a TF-IDF index. A candidate must have a close date within a window of the other market's, and numeric thresholds that agree. An open-weights LLM behind an OpenAI-compatible API (Groq `openai/gpt-oss-120b` by default) then confirms that each pair settles on the same outcome, and which way round the outcomes line up. Every verdict is cached in `data/match_cache.json`.
 3. **Arbitrage engine** (`src/arbitrage`) holds four ask ladders per pair: Kalshi YES, Kalshi NO, Polymarket YES-equivalent and Polymarket NO-equivalent. After each update it re-evaluates the one trade direction that update affects:
    `edge = $1 - kalshiAsk - polymarketAsk - kalshiFee - polymarketFee`
 4. **Binary logging** (`src/logging`) writes fixed 64-byte records. A background thread drains them to `data/logs/*.bin`. Decode them with `kparb_logdecode`.

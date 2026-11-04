@@ -70,6 +70,9 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readInto(languageModel, "requestsPerMinute", config.languageModel.requestsPerMinute);
     readInto(languageModel, "maximumAttempts", config.languageModel.maximumAttempts);
     readInto(languageModel, "requestJsonObject", config.languageModel.requestJsonObject);
+    readInto(languageModel, "maximumOutputTokens", config.languageModel.maximumOutputTokens);
+    readInto(languageModel, "reasoningEffort", config.languageModel.reasoningEffort);
+    readInto(languageModel, "maximumRetryAfterSeconds", config.languageModel.maximumRetryAfterSeconds);
 
     const auto matching = sectionOf(document, "matching");
     readInto(matching, "candidatesPerMarket", config.matcher.candidates.candidatesPerMarket);

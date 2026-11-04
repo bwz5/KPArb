@@ -4,18 +4,21 @@
 #include "matching/LanguageModelClient.h"
 
 #include <chrono>
+#include <cstdint>
 #include <string>
 
 namespace kparb {
 
 struct ChatCompletionsSettings {
     std::string baseUrl = "https://api.groq.com/openai/v1";
-    std::string model = "llama-3.3-70b-versatile";
+    std::string model = "openai/gpt-oss-120b";
     std::string apiKey;
-    double requestsPerMinute = 25.0;
+    double requestsPerMinute = 10.0;
     int maximumAttempts = 6;
-    int maximumOutputTokens = 300;
-    bool requestJsonObject = true;
+    int maximumOutputTokens = 700;
+    std::string reasoningEffort = "low";
+    bool requestJsonObject = false;
+    std::int64_t maximumRetryAfterSeconds = 120;
 };
 
 class ChatCompletionsClient final : public LanguageModelClient {

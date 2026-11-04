@@ -25,10 +25,13 @@
   },
   "languageModel": {
     "baseUrl": "https://api.groq.com/openai/v1",
-    "model": "llama-3.3-70b-versatile",
-    "requestsPerMinute": 25,
+    "model": "openai/gpt-oss-120b",
+    "requestsPerMinute": 10,
     "maximumAttempts": 6,
-    "requestJsonObject": true
+    "maximumOutputTokens": 700,
+    "reasoningEffort": "low",
+    "requestJsonObject": false,
+    "maximumRetryAfterSeconds": 120
   },
   "discovery": {
     "maximumDaysUntilResolution": 2,
@@ -43,7 +46,7 @@
     "maximumCloseTimeDifferenceDays": 2,
     "requireCompatibleNumbers": true,
     "minimumConfidence": 0.85,
-    "maximumLanguageModelRequests": 1500,
+    "maximumLanguageModelRequests": 900,
     "maximumRulesCharacters": 800,
     "maximumConsecutiveFailures": 5,
     "cachePath": "data/match_cache.json",
