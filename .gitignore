@@ -17,6 +17,7 @@ Icon?
 *~
 
 build/
+build.nosync/
 cmake-build-*/
 out/
 CMakeCache.txt

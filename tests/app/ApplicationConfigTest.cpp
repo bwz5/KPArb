@@ -33,6 +33,12 @@ TEST(ApplicationConfigTest, PartialConfigKeepsDefaults)
     EXPECT_EQ(config.polymarketFeed.connection.textPingIntervalSeconds, 10);
 }
 
+TEST(ApplicationConfigTest, EmptyConfigUsesDefaults)
+{
+    const auto config = parseApplicationConfig("  \n");
+    EXPECT_EQ(config.engine.minimumEdgeTicks, 5);
+}
+
 TEST(ApplicationConfigTest, MissingConfigFileUsesDefaults)
 {
     const auto config = loadApplicationConfig("/nonexistent/config.json");

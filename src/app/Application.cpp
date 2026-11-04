@@ -288,10 +288,10 @@ DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel)
     });
     const std::size_t kalshiFetchedCount = kalshiFetched.size();
     DiscoveredMarkets markets;
-    markets.kalshi = keepMarketsResolvingWithin(std::move(kalshiFetched), window);
+    markets.kalshi = keepOpenMarketsResolvingWithin(std::move(kalshiFetched), window);
     writeMatchEvent(applicationChannel, MatchEventCode::KalshiCatalogLoaded, static_cast<std::int64_t>(markets.kalshi.size()),
         static_cast<std::int64_t>(kalshiFetchedCount));
-    std::cout << "kalshi binary markets resolving in window: " << markets.kalshi.size() << " of " << kalshiFetchedCount << " fetched\n";
+    std::cout << "kalshi open binary markets resolving in window: " << markets.kalshi.size() << " of " << kalshiFetchedCount << " fetched\n";
 
     PolymarketCatalogSettings polymarketSettings = config.polymarketCatalog;
     polymarketSettings.minimumEndTimestamp = window.earliestSeconds;
@@ -304,10 +304,10 @@ DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel)
         }
     });
     const std::size_t polymarketFetchedCount = polymarketFetched.size();
-    markets.polymarket = keepMarketsResolvingWithin(std::move(polymarketFetched), window);
+    markets.polymarket = keepOpenMarketsResolvingWithin(std::move(polymarketFetched), window);
     writeMatchEvent(applicationChannel, MatchEventCode::PolymarketCatalogLoaded, static_cast<std::int64_t>(markets.polymarket.size()),
         static_cast<std::int64_t>(polymarketFetchedCount));
-    std::cout << "polymarket binary markets resolving in window: " << markets.polymarket.size() << " of " << polymarketFetchedCount
+    std::cout << "polymarket open binary markets resolving in window: " << markets.polymarket.size() << " of " << polymarketFetchedCount
               << " fetched\n";
     return markets;
 }

@@ -11,6 +11,8 @@
     "enableOrderBook": true,
     "active": true,
     "closed": false,
+    "acceptingOrders": true,
+    "acceptingOrdersTimestamp": "2026-10-01T12:00:00Z",
     "feesEnabled": true,
     "feeSchedule": {"exponent": 1, "rate": 0.04, "takerOnly": true, "rebateRate": 0.25}
   },

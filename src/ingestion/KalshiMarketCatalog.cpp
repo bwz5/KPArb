@@ -59,6 +59,9 @@ std::string parseKalshiMarketsPage(std::string_view body, std::vector<MarketInfo
             }
             info.yesOutcomeName = readString(market, "yes_sub_title");
             info.noOutcomeName = readString(market, "no_sub_title");
+            const std::string status = readString(market, "status");
+            info.isAcceptingOrders = status == "active" || status == "open";
+            info.openTimeSeconds = readTimestamp(market, "open_time");
             info.closeTimeSeconds = readTimestamp(market, "expected_expiration_time");
             if (info.closeTimeSeconds == 0) {
                 info.closeTimeSeconds = readTimestamp(market, "close_time");

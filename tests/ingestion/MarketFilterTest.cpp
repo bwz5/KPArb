@@ -6,11 +6,13 @@
 namespace kparb {
 namespace {
 
-MarketInfo marketClosingAt(std::string identifier, std::int64_t closeTime)
+MarketInfo marketClosingAt(std::string identifier, std::int64_t closeTime, std::int64_t openTime = 1, bool isAcceptingOrders = true)
 {
     MarketInfo market;
     market.identifier = std::move(identifier);
     market.closeTimeSeconds = closeTime;
+    market.openTimeSeconds = openTime;
+    market.isAcceptingOrders = isAcceptingOrders;
     return market;
 }
 
@@ -19,7 +21,7 @@ TEST(MarketFilterTest, KeepsOnlyMarketsResolvingInsideWindow)
     const std::int64_t now = 1'800'000'000;
     const auto window = resolutionWindowFrom(now, 2.0);
     EXPECT_EQ(window.latestSeconds - window.earliestSeconds, 2 * 86400);
-    const auto kept = keepMarketsResolvingWithin(
+    const auto kept = keepOpenMarketsResolvingWithin(
         {
             marketClosingAt("past", now - 60),
             marketClosingAt("soon", now + 3600),
@@ -31,6 +33,23 @@ TEST(MarketFilterTest, KeepsOnlyMarketsResolvingInsideWindow)
     ASSERT_EQ(kept.size(), 2U);
     EXPECT_EQ(kept[0].identifier, "soon");
     EXPECT_EQ(kept[1].identifier, "edge");
+}
+
+TEST(MarketFilterTest, DropsMarketsThatAreNotOpenForTradingYet)
+{
+    const std::int64_t now = 1'800'000'000;
+    const auto window = resolutionWindowFrom(now, 2.0);
+    const auto kept = keepOpenMarketsResolvingWithin(
+        {
+            marketClosingAt("open", now + 3600, now - 86400, true),
+            marketClosingAt("opens-later", now + 3600, now + 60, true),
+            marketClosingAt("paused", now + 3600, now - 86400, false),
+            marketClosingAt("unknown-open-time", now + 3600, 0, true),
+        },
+        window);
+    ASSERT_EQ(kept.size(), 2U);
+    EXPECT_EQ(kept[0].identifier, "open");
+    EXPECT_EQ(kept[1].identifier, "unknown-open-time");
 }
 
 TEST(MarketFilterTest, IsoFormattingRoundTrips)

@@ -10,12 +10,14 @@ ResolutionWindow resolutionWindowFrom(std::int64_t nowSeconds, double maximumDay
     return ResolutionWindow{nowSeconds, nowSeconds + windowSeconds};
 }
 
-std::vector<MarketInfo> keepMarketsResolvingWithin(std::vector<MarketInfo> markets, const ResolutionWindow& window)
+std::vector<MarketInfo> keepOpenMarketsResolvingWithin(std::vector<MarketInfo> markets, const ResolutionWindow& window)
 {
     markets.erase(std::remove_if(markets.begin(), markets.end(),
                       [&window](const MarketInfo& market) {
-                          return market.closeTimeSeconds <= 0 || market.closeTimeSeconds < window.earliestSeconds
-                              || market.closeTimeSeconds > window.latestSeconds;
+                          const bool isOpenNow = market.isAcceptingOrders && market.openTimeSeconds <= window.earliestSeconds;
+                          const bool resolvesInWindow = market.closeTimeSeconds > 0 && market.closeTimeSeconds >= window.earliestSeconds
+                              && market.closeTimeSeconds <= window.latestSeconds;
+                          return !isOpenNow || !resolvesInWindow;
                       }),
         markets.end());
     return markets;

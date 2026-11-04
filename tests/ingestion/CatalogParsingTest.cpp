@@ -29,6 +29,9 @@ TEST(CatalogParsingTest, ParsesKalshiBinaryMarketsAndCursor)
     EXPECT_NE(markets[0].rules.find("Source: Federal Reserve."), std::string::npos);
     EXPECT_EQ(markets[1].identifier, "KXBTC-26DEC31-T100000");
     EXPECT_EQ(markets[1].noOutcomeName, "Below $100,000");
+    EXPECT_TRUE(markets[0].isAcceptingOrders);
+    EXPECT_EQ(markets[0].openTimeSeconds, 1793541600);
+    EXPECT_FALSE(markets[1].isAcceptingOrders);
 }
 
 TEST(CatalogParsingTest, ParsesOnlyOpenBinaryPolymarketMarkets)
@@ -48,6 +51,8 @@ TEST(CatalogParsingTest, ParsesOnlyOpenBinaryPolymarketMarkets)
     EXPECT_EQ(market.closeTimeSeconds, 1796774400);
     EXPECT_DOUBLE_EQ(market.takerFeeRate, 0.04);
     EXPECT_DOUBLE_EQ(market.takerFeeExponent, 1.0);
+    EXPECT_TRUE(market.isAcceptingOrders);
+    EXPECT_EQ(market.openTimeSeconds, 1790856000);
 }
 
 TEST(CatalogParsingTest, ParsesPolymarketKeysetEnvelope)

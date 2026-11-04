@@ -101,6 +101,11 @@ PolymarketPage parsePolymarketMarketsPage(std::string_view body, std::vector<Mar
         info.yesTokenIdentifier = tokens[0];
         info.noTokenIdentifier = tokens[1];
         info.closeTimeSeconds = parseIsoTimestampSeconds(readString(market, "endDate")).value_or(0);
+        info.isAcceptingOrders = readBoolean(market, "acceptingOrders", false);
+        info.openTimeSeconds = parseIsoTimestampSeconds(readString(market, "acceptingOrdersTimestamp")).value_or(0);
+        if (info.openTimeSeconds == 0) {
+            info.openTimeSeconds = parseIsoTimestampSeconds(readString(market, "startDate")).value_or(0);
+        }
         const auto feeSchedule = market.find("feeSchedule");
         if (readBoolean(market, "feesEnabled", false) && feeSchedule != market.end() && feeSchedule->is_object()) {
             info.takerFeeRate = feeSchedule->value("rate", 0.0);

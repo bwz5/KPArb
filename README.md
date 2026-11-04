@@ -13,6 +13,7 @@ Detects arbitrage between equivalent Kalshi and Polymarket binary markets. It on
 ### Discovery cycles
 
 - Only markets that resolve within `discovery.maximumDaysUntilResolution` are considered (default 2 days). For Kalshi this is `expected_expiration_time`; for Polymarket it is `endDate`.
+- Markets must also be open for trading at discovery time. On Kalshi that means `status` is `active` and `open_time` has passed. On Polymarket it means `acceptingOrders` is true and `acceptingOrdersTimestamp` (or `startDate`) has passed.
 - Matching runs on a background thread. Streaming starts as soon as either `pairsBeforeStreaming` pairs (default 500) are matched, `maximumMinutesBeforeStreaming` (default 5) have passed, or matching finishes.
 - Matching keeps running while the stream is live. The stream restarts with the larger pair set each time another `pairsBetweenStreamRestarts` pairs (default 25) are matched, and once more when matching finishes.
 - Discovery and matching rerun every `rematchIntervalMinutes` (default 60) so new short-dated markets get picked up. Cached verdicts make later cycles cheap.
@@ -37,7 +38,7 @@ Requires CMake 3.24+, Ninja, a C++20 compiler and OpenSSL 3 (`brew install cmake
 ```sh
 cmake --preset release && cmake --build --preset release
 ctest --preset release
-./build/release/benchmarks/kparb_engine_benchmark
+./build.nosync/release/benchmarks/kparb_engine_benchmark
 ```
 
 The `debug`, `asan` and `tsan` presets also exist.
@@ -80,10 +81,10 @@ To force a pair in or out of the matched set, create `data/manual_matches.json`:
 ## Run
 
 ```sh
-./build/release/src/app/kparb --match-only
-./build/release/src/app/kparb --use-saved-pairs
-./build/release/src/app/kparb
-./build/release/src/app/kparb --use-saved-pairs --duration-seconds 600
+./build.nosync/release/src/app/kparb --match-only
+./build.nosync/release/src/app/kparb --use-saved-pairs
+./build.nosync/release/src/app/kparb
+./build.nosync/release/src/app/kparb --use-saved-pairs --duration-seconds 600
 ```
 
 - `--match-only` discovers markets, matches them, writes `data/matched_pairs.json`, then exits.
@@ -94,8 +95,8 @@ To force a pair in or out of the matched set, create `data/manual_matches.json`:
 ## Decode logs
 
 ```sh
-./build/release/src/tools/kparb_logdecode data/logs/kparb-<timestamp>.bin
-./build/release/src/tools/kparb_logdecode data/logs/kparb-<timestamp>.bin --type opportunity --csv > opportunities.csv
+./build.nosync/release/src/tools/kparb_logdecode data/logs/kparb-<timestamp>.bin
+./build.nosync/release/src/tools/kparb_logdecode data/logs/kparb-<timestamp>.bin --type opportunity --csv > opportunities.csv
 ```
 
 The available record types are `opportunity`, `opportunity_closed`, `feed_event`, `engine_stats`, `match_event` and `pair_name`.

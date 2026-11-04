@@ -13,6 +13,7 @@
       "rules_secondary": "Source: Federal Reserve.",
       "close_time": "2026-12-09T18:59:00Z",
       "expected_expiration_time": "2026-12-09T19:00:00Z",
+      "open_time": "2026-11-01T14:00:00Z",
       "status": "active"
     },
     {
@@ -29,7 +30,8 @@
       "yes_sub_title": "$100,000 or above",
       "no_sub_title": "Below $100,000",
       "rules_primary": "Resolves Yes if the CF Benchmarks BRTI is at or above 100000 at 5pm ET on Dec 31, 2026.",
-      "close_time": "2026-12-31T22:00:00Z"
+      "close_time": "2026-12-31T22:00:00Z",
+      "status": "initialized"
     }
   ]
 }

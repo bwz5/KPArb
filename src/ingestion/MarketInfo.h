@@ -19,6 +19,8 @@ struct MarketInfo {
     std::string yesTokenIdentifier;
     std::string noTokenIdentifier;
     std::int64_t closeTimeSeconds = 0;
+    std::int64_t openTimeSeconds = 0;
+    bool isAcceptingOrders = false;
     double takerFeeRate = 0.0;
     double takerFeeExponent = 1.0;
 };

@@ -14,6 +14,6 @@ struct ResolutionWindow {
 
 ResolutionWindow resolutionWindowFrom(std::int64_t nowSeconds, double maximumDaysUntilResolution);
 
-std::vector<MarketInfo> keepMarketsResolvingWithin(std::vector<MarketInfo> markets, const ResolutionWindow& window);
+std::vector<MarketInfo> keepOpenMarketsResolvingWithin(std::vector<MarketInfo> markets, const ResolutionWindow& window);
 
 }

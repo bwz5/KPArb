@@ -38,6 +38,9 @@ nlohmann::json sectionOf(const nlohmann::json& document, const char* key)
 ApplicationConfig parseApplicationConfig(const std::string& json)
 {
     ApplicationConfig config;
+    if (json.find_first_not_of(" \t\r\n") == std::string::npos) {
+        return config;
+    }
     const auto document = nlohmann::json::parse(json);
 
     const auto environment = sectionOf(document, "environment");
