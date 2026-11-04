@@ -1,0 +1,2 @@
+add_executable(kparb_engine_benchmark ArbitrageEngineBenchmark.cpp)
+target_link_libraries(kparb_engine_benchmark PRIVATE kparb_arbitrage)

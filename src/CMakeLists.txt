@@ -1,0 +1,7 @@
+add_subdirectory(common)
+add_subdirectory(logging)
+add_subdirectory(arbitrage)
+add_subdirectory(ingestion)
+add_subdirectory(matching)
+add_subdirectory(app)
+add_subdirectory(tools)
