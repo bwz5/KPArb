@@ -38,7 +38,7 @@ Requires CMake 3.24+, Ninja, a C++20 compiler and OpenSSL 3 (`brew install cmake
 ```sh
 cmake --preset release && cmake --build --preset release
 ctest --preset release
-./build.nosync/release/benchmarks/kparb_engine_benchmark
+./build/release/benchmarks/kparb_engine_benchmark
 ```
 
 The `debug`, `asan` and `tsan` presets also exist.
@@ -81,10 +81,10 @@ To force a pair in or out of the matched set, create `data/manual_matches.json`:
 ## Run
 
 ```sh
-./build.nosync/release/src/app/kparb --match-only
-./build.nosync/release/src/app/kparb --use-saved-pairs
-./build.nosync/release/src/app/kparb
-./build.nosync/release/src/app/kparb --use-saved-pairs --duration-seconds 600
+./build/release/src/app/kparb --match-only
+./build/release/src/app/kparb --use-saved-pairs
+./build/release/src/app/kparb
+./build/release/src/app/kparb --use-saved-pairs --duration-seconds 600
 ```
 
 - `--match-only` discovers markets, matches them, writes `data/matched_pairs.json`, then exits.
@@ -95,8 +95,8 @@ To force a pair in or out of the matched set, create `data/manual_matches.json`:
 ## Decode logs
 
 ```sh
-./build.nosync/release/src/tools/kparb_logdecode data/logs/kparb-<timestamp>.bin
-./build.nosync/release/src/tools/kparb_logdecode data/logs/kparb-<timestamp>.bin --type opportunity --csv > opportunities.csv
+./build/release/src/tools/kparb_logdecode data/logs/kparb-<timestamp>.bin
+./build/release/src/tools/kparb_logdecode data/logs/kparb-<timestamp>.bin --type opportunity --csv > opportunities.csv
 ```
 
 The available record types are `opportunity`, `opportunity_closed`, `feed_event`, `engine_stats`, `match_event` and `pair_name`.

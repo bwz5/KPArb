@@ -5,7 +5,7 @@
             "name": "base",
             "hidden": true,
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build.nosync/${presetName}"
+            "binaryDir": "${sourceDir}/build/${presetName}"
         },
         {
             "name": "debug",
