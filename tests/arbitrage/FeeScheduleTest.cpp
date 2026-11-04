@@ -24,5 +24,15 @@ TEST(FeeScheduleTest, KalshiTakerFeePeaksAtFiftyCents)
     EXPECT_GT(schedule.feeAt(500), schedule.feeAt(300));
 }
 
+TEST(FeeScheduleTest, PolymarketCurveMatchesPublishedTable)
+{
+    const auto politics = FeeSchedule::curve(0.04, 1.0);
+    EXPECT_EQ(politics.feeAt(500), 10);
+    const auto crypto = FeeSchedule::curve(0.07, 1.0);
+    EXPECT_EQ(crypto.feeAt(300), 15);
+    EXPECT_EQ(FeeSchedule::curve(0.0, 1.0), FeeSchedule::zero());
+    EXPECT_LT(FeeSchedule::curve(0.04, 2.0).feeAt(500), politics.feeAt(500));
+}
+
 }
 }

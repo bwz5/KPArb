@@ -1,0 +1,35 @@
+{
+  "cursor": "CgwI2aOvqAYQ+NyHxwISHUtYRkVEREVDSVNJT04tMjZERUMtSDA=",
+  "markets": [
+    {
+      "ticker": "KXFEDDECISION-26DEC-H0",
+      "event_ticker": "KXFEDDECISION-26DEC",
+      "market_type": "binary",
+      "title": "Fed decision in December 2026?",
+      "subtitle": "",
+      "yes_sub_title": "Hold rates",
+      "no_sub_title": "Hold rates",
+      "rules_primary": "If the Federal Reserve holds the target rate at its December 2026 meeting, then the market resolves to Yes.",
+      "rules_secondary": "Source: Federal Reserve.",
+      "close_time": "2026-12-09T18:59:00Z",
+      "expected_expiration_time": "2026-12-09T19:00:00Z",
+      "status": "active"
+    },
+    {
+      "ticker": "KXMVECROSS-ABC",
+      "event_ticker": "KXMVECROSS",
+      "market_type": "scalar",
+      "title": "Scalar market",
+      "close_time": "2026-12-09T18:59:00Z"
+    },
+    {
+      "ticker": "KXBTC-26DEC31-T100000",
+      "event_ticker": "KXBTC-26DEC31",
+      "title": "Bitcoin above $100,000 on Dec 31, 2026?",
+      "yes_sub_title": "$100,000 or above",
+      "no_sub_title": "Below $100,000",
+      "rules_primary": "Resolves Yes if the CF Benchmarks BRTI is at or above 100000 at 5pm ET on Dec 31, 2026.",
+      "close_time": "2026-12-31T22:00:00Z"
+    }
+  ]
+}

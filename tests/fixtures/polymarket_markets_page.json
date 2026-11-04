@@ -1,0 +1,38 @@
+[
+  {
+    "id": "512345",
+    "question": "Will the Fed hold rates in December 2026?",
+    "conditionId": "0xabc123",
+    "slug": "fed-hold-december-2026",
+    "description": "This market resolves to Yes if the FOMC leaves the federal funds target range unchanged at the December 2026 meeting.",
+    "endDate": "2026-12-09T00:00:00Z",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "clobTokenIds": "[\"1111111111111111111111111111111111111111111111111111111111111111111111111111\", \"2222222222222222222222222222222222222222222222222222222222222222222222222222\"]",
+    "enableOrderBook": true,
+    "active": true,
+    "closed": false,
+    "feesEnabled": true,
+    "feeSchedule": {"exponent": 1, "rate": 0.04, "takerOnly": true, "rebateRate": 0.25}
+  },
+  {
+    "id": "512346",
+    "question": "Who wins the 2026 championship?",
+    "conditionId": "0xdef456",
+    "slug": "championship-2026",
+    "outcomes": "[\"Team A\", \"Team B\", \"Team C\"]",
+    "clobTokenIds": "[\"1\", \"2\", \"3\"]",
+    "enableOrderBook": true,
+    "active": true,
+    "closed": false
+  },
+  {
+    "id": "512347",
+    "question": "Closed market",
+    "conditionId": "0x999",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "clobTokenIds": "[\"4\", \"5\"]",
+    "enableOrderBook": true,
+    "active": true,
+    "closed": true
+  }
+]

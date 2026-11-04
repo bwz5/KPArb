@@ -37,6 +37,10 @@ public:
     ArbitrageEngine(std::uint32_t pairCount, FeeSchedule kalshiFeeSchedule, FeeSchedule polymarketFeeSchedule,
         EngineSettings engineSettings, LogChannel& outputChannel);
 
+    static constexpr std::size_t maximumPolymarketFeeSchedules = 255;
+
+    bool assignPolymarketFeeSchedule(std::uint32_t pairIndex, const FeeSchedule& schedule);
+
     void applyUpdate(const LadderUpdate& update) noexcept;
 
     template <bool usePrefetch>
@@ -103,7 +107,10 @@ private:
         std::array<std::int64_t, laddersPerPair> lastUpdateNanos{};
         std::array<Ticks, laddersPerPair> bestAskPrice{noPrice, noPrice, noPrice, noPrice};
         std::array<bool, 2> isOpportunityOpen{};
+        std::uint8_t polymarketFeeScheduleIndex = 0;
     };
+
+    static_assert(sizeof(PairQuote) == 64);
 
     struct OpportunityState {
         std::int64_t openedAtNanos = 0;
@@ -135,9 +142,10 @@ private:
     void resetVenue(Venue venue, std::int64_t receivedAtNanos) noexcept;
     void refreshQuote(std::uint32_t ladderIndex, std::int64_t receivedAtNanos) noexcept;
     void evaluateDirection(std::uint32_t pairIndex, TradeDirection direction, std::int64_t nowNanos) noexcept;
-    DepthResult measureDepth(const AskLadder& kalshiLadder, const AskLadder& polymarketLadder) const noexcept;
+    DepthResult measureDepth(const AskLadder& kalshiLadder, const AskLadder& polymarketLadder,
+        const FeeSchedule& polymarketFees) const noexcept;
 
-    std::int32_t edgeAt(Ticks kalshiPrice, Ticks polymarketPrice) const noexcept
+    std::int32_t edgeAt(Ticks kalshiPrice, Ticks polymarketPrice, const FeeSchedule& polymarketFees) const noexcept
     {
         return static_cast<std::int32_t>(ticksPerDollar) - kalshiPrice - polymarketPrice
             - kalshiFees.feeAt(kalshiPrice) - polymarketFees.feeAt(polymarketPrice);
@@ -145,7 +153,7 @@ private:
 
     std::uint32_t totalPairs;
     FeeSchedule kalshiFees;
-    FeeSchedule polymarketFees;
+    std::vector<FeeSchedule> polymarketFeeSchedules;
     EngineSettings settings;
     LogChannel& logChannel;
     EngineCounters engineCounters;

@@ -111,6 +111,21 @@ TEST_F(ArbitrageEngineTest, FeesCanEliminateEdge)
     EXPECT_EQ(opportunities[0].loadPayload<OpportunityRecord>().topEdgeTicks, 1000 - 490 - 470 - 18);
 }
 
+TEST_F(ArbitrageEngineTest, PerPairPolymarketFeesApply)
+{
+    createEngine(2);
+    ASSERT_TRUE(engine->assignPolymarketFeeSchedule(1, FeeSchedule::curve(0.04, 1.0)));
+    synchronizeAll(0);
+    synchronizeAll(1);
+    setLevel(0, LadderSlot::KalshiBuyYes, 495, 100);
+    setLevel(0, LadderSlot::PolymarketBuyNo, 500, 100);
+    setLevel(1, LadderSlot::KalshiBuyYes, 495, 100);
+    setLevel(1, LadderSlot::PolymarketBuyNo, 500, 100);
+    EXPECT_TRUE(engine->isOpportunityOpen(0, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    EXPECT_FALSE(engine->isOpportunityOpen(1, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    EXPECT_FALSE(engine->assignPolymarketFeeSchedule(5, FeeSchedule::zero()));
+}
+
 TEST_F(ArbitrageEngineTest, UnsynchronizedLaddersIgnoreLevels)
 {
     createEngine(1);
