@@ -13,19 +13,32 @@ namespace kparb {
 struct CandidatePair {
     std::size_t kalshiIndex;
     std::size_t polymarketIndex;
-    double similarity;
+    double score;
+    std::int64_t closeTimeDifferenceSeconds;
 };
 
 struct CandidateSettings {
-    std::size_t candidatesPerMarket = 2;
+    std::size_t candidatesPerMarket = 3;
+    std::size_t candidatesPerPolymarketMarket = 3;
     double minimumSimilarity = 0.45;
+    double sharedTeamBonus = 0.25;
     std::int64_t maximumCloseTimeDifferenceSeconds = 2 * 86400;
     double maximumDocumentFrequencyFraction = 0.05;
     std::size_t minimumDocumentFrequencyCap = 50;
     bool requireCompatibleNumbers = true;
+    bool requireCompatibleMarketTypes = true;
+    bool requireMatchingStrikes = true;
 };
 
 std::string matchingTextFor(const MarketInfo& market);
+
+std::string candidateTextFor(const MarketInfo& market);
+
+bool areStrikesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept;
+
+bool areSubjectTeamsCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept;
+
+std::size_t sharedTeamCount(const MarketInfo& first, const MarketInfo& second);
 
 class CandidateFinder {
 public:

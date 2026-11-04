@@ -1,5 +1,6 @@
 #include "matching/CandidateFinder.h"
 
+#include "ingestion/MarketClassification.h"
 #include "matching/TextNormalizer.h"
 
 #include <algorithm>
@@ -16,6 +17,59 @@ std::string matchingTextFor(const MarketInfo& market)
     return market.title + " " + market.subtitle;
 }
 
+std::string candidateTextFor(const MarketInfo& market)
+{
+    std::string text = matchingTextFor(market);
+    for (const std::string* extra : {&market.eventTitle, &market.rulesSummary}) {
+        if (!extra->empty()) {
+            text += ' ';
+            text += *extra;
+        }
+    }
+    for (const std::string& key : market.teamKeys) {
+        text += ' ';
+        for (const char character : key) {
+            if (character != ':') {
+                text += character;
+            }
+        }
+    }
+    return text;
+}
+
+std::size_t sharedTeamCount(const MarketInfo& first, const MarketInfo& second)
+{
+    std::size_t shared = 0;
+    auto left = first.teamKeys.begin();
+    auto right = second.teamKeys.begin();
+    while (left != first.teamKeys.end() && right != second.teamKeys.end()) {
+        if (*left < *right) {
+            ++left;
+        } else if (*right < *left) {
+            ++right;
+        } else {
+            ++shared;
+            ++left;
+            ++right;
+        }
+    }
+    return shared;
+}
+
+bool areStrikesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept
+{
+    if (!polymarketMarket.hasStrike) {
+        return true;
+    }
+    return kalshiMarket.hasStrike && std::fabs(kalshiMarket.strike - polymarketMarket.strike) < 1e-6;
+}
+
+bool areSubjectTeamsCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept
+{
+    return kalshiMarket.subjectTeamKey.empty() || polymarketMarket.subjectTeamKey.empty()
+        || kalshiMarket.subjectTeamKey == polymarketMarket.subjectTeamKey;
+}
+
 CandidateFinder::CandidateFinder(const std::vector<MarketInfo>& polymarketMarkets, CandidateSettings candidateSettings)
     : settings(candidateSettings)
     , polymarket(polymarketMarkets)
@@ -23,8 +77,8 @@ CandidateFinder::CandidateFinder(const std::vector<MarketInfo>& polymarketMarket
     std::vector<std::vector<std::string>> documents;
     documents.reserve(polymarket.size());
     for (const MarketInfo& market : polymarket) {
-        documents.push_back(tokenizeForMatching(matchingTextFor(market)));
-        polymarketNumbers.push_back(numericTokens(documents.back()));
+        documents.push_back(tokenizeForMatching(candidateTextFor(market)));
+        polymarketNumbers.push_back(numericTokens(tokenizeForMatching(matchingTextFor(market))));
         std::unordered_set<std::string> unique(documents.back().begin(), documents.back().end());
         for (const std::string& token : unique) {
             const auto [entry, inserted] = vocabulary.try_emplace(token, static_cast<std::uint32_t>(vocabulary.size()));
@@ -102,6 +156,18 @@ bool CandidateFinder::numbersAreCompatible(const std::vector<std::string>& first
         || std::includes(second.begin(), second.end(), first.begin(), first.end());
 }
 
+namespace {
+
+bool isBetterCandidate(const CandidatePair& left, const CandidatePair& right) noexcept
+{
+    if (left.score != right.score) {
+        return left.score > right.score;
+    }
+    return left.closeTimeDifferenceSeconds < right.closeTimeDifferenceSeconds;
+}
+
+}
+
 std::vector<CandidatePair> CandidateFinder::findCandidates(const std::vector<MarketInfo>& kalshiMarkets) const
 {
     std::vector<CandidatePair> candidates;
@@ -110,8 +176,8 @@ std::vector<CandidatePair> CandidateFinder::findCandidates(const std::vector<Mar
 
     for (std::size_t kalshiIndex = 0; kalshiIndex < kalshiMarkets.size(); ++kalshiIndex) {
         const MarketInfo& kalshiMarket = kalshiMarkets[kalshiIndex];
-        const auto tokens = tokenizeForMatching(matchingTextFor(kalshiMarket));
-        const auto kalshiNumbers = numericTokens(tokens);
+        const auto tokens = tokenizeForMatching(candidateTextFor(kalshiMarket));
+        const auto kalshiNumbers = numericTokens(tokenizeForMatching(matchingTextFor(kalshiMarket)));
         touched.clear();
         for (const auto& [term, queryWeight] : weightedVector(tokens, true)) {
             if (documentFrequency[term] > documentFrequencyCap) {
@@ -127,30 +193,50 @@ std::vector<CandidatePair> CandidateFinder::findCandidates(const std::vector<Mar
 
         std::vector<CandidatePair> marketCandidates;
         for (const std::uint32_t documentIndex : touched) {
-            const double similarity = scores[documentIndex];
+            const MarketInfo& polymarketMarket = polymarket[documentIndex];
+            const std::size_t sharedTeams = sharedTeamCount(kalshiMarket, polymarketMarket);
+            const bool bothNameTeams = !kalshiMarket.teamKeys.empty() && !polymarketMarket.teamKeys.empty();
+            const double teamBonus = kalshiMarket.marketType.empty() ? 0.0 : settings.sharedTeamBonus * static_cast<double>(sharedTeams);
+            const double score = scores[documentIndex] + teamBonus;
             scores[documentIndex] = 0.0;
-            if (similarity < settings.minimumSimilarity) {
+            if (score < settings.minimumSimilarity || (bothNameTeams && sharedTeams == 0)) {
                 continue;
             }
-            const MarketInfo& polymarketMarket = polymarket[documentIndex];
-            if (kalshiMarket.closeTimeSeconds > 0 && polymarketMarket.closeTimeSeconds > 0
-                && std::llabs(kalshiMarket.closeTimeSeconds - polymarketMarket.closeTimeSeconds) > settings.maximumCloseTimeDifferenceSeconds) {
+            const bool hasBothTimes = kalshiMarket.closeTimeSeconds > 0 && polymarketMarket.closeTimeSeconds > 0;
+            const std::int64_t closeTimeDifference = hasBothTimes ? std::llabs(kalshiMarket.closeTimeSeconds - polymarketMarket.closeTimeSeconds) : 0;
+            if (closeTimeDifference > settings.maximumCloseTimeDifferenceSeconds) {
+                continue;
+            }
+            if (settings.requireCompatibleMarketTypes && !areMarketTypesCompatible(kalshiMarket.marketType, polymarketMarket.marketType)) {
+                continue;
+            }
+            if (settings.requireMatchingStrikes && !areStrikesCompatible(kalshiMarket, polymarketMarket)) {
+                continue;
+            }
+            if (!areSubjectTeamsCompatible(kalshiMarket, polymarketMarket)) {
                 continue;
             }
             if (settings.requireCompatibleNumbers && !numbersAreCompatible(kalshiNumbers, polymarketNumbers[documentIndex])) {
                 continue;
             }
-            marketCandidates.push_back(CandidatePair{kalshiIndex, documentIndex, similarity});
+            marketCandidates.push_back(CandidatePair{kalshiIndex, documentIndex, score, closeTimeDifference});
         }
-        std::sort(marketCandidates.begin(), marketCandidates.end(),
-            [](const CandidatePair& left, const CandidatePair& right) { return left.similarity > right.similarity; });
+        std::sort(marketCandidates.begin(), marketCandidates.end(), isBetterCandidate);
         if (marketCandidates.size() > settings.candidatesPerMarket) {
             marketCandidates.resize(settings.candidatesPerMarket);
         }
         candidates.insert(candidates.end(), marketCandidates.begin(), marketCandidates.end());
     }
-    std::sort(candidates.begin(), candidates.end(),
-        [](const CandidatePair& left, const CandidatePair& right) { return left.similarity > right.similarity; });
+    std::sort(candidates.begin(), candidates.end(), isBetterCandidate);
+    std::vector<std::size_t> keptPerPolymarketMarket(polymarket.size(), 0);
+    std::vector<CandidatePair> kept;
+    kept.reserve(candidates.size());
+    for (const CandidatePair& candidate : candidates) {
+        if (keptPerPolymarketMarket[candidate.polymarketIndex]++ < settings.candidatesPerPolymarketMarket) {
+            kept.push_back(candidate);
+        }
+    }
+    candidates = std::move(kept);
     return candidates;
 }
 

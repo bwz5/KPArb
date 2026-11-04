@@ -18,6 +18,7 @@ enum class RunMode : std::uint8_t {
     DiscoverMatchAndTrade,
     MatchOnly,
     TradeSavedPairs,
+    CandidatesOnly,
 };
 
 enum class StreamOutcome : std::uint8_t {
@@ -30,6 +31,7 @@ enum class StreamOutcome : std::uint8_t {
 struct RunOptions {
     RunMode mode = RunMode::DiscoverMatchAndTrade;
     std::filesystem::path configPath = "config/config.json";
+    std::filesystem::path candidatesPath = "data/candidates.tsv";
     std::int64_t durationSeconds = 0;
 };
 
@@ -57,6 +59,7 @@ private:
 
     int runDiscoveryCycles(LogChannels& channels, Clock::time_point overallDeadline, const std::atomic<bool>& shutdownRequested);
     int runSavedPairs(LogChannels& channels, Clock::time_point overallDeadline, const std::atomic<bool>& shutdownRequested);
+    int runCandidatesOnly(LogChannels& channels);
     DiscoveredMarkets discoverMarkets(LogChannel& applicationChannel);
     StreamOutcome streamAndDetect(const std::vector<MatchedPair>& pairs, LogChannels& channels,
         const std::function<bool()>& shouldEndSession, const std::atomic<bool>& shutdownRequested);

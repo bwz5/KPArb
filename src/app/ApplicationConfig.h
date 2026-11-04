@@ -29,9 +29,11 @@ struct ApplicationConfig {
     std::filesystem::path matchCachePath = "data/match_cache.json";
     std::filesystem::path manualMatchesPath = "data/manual_matches.json";
     std::filesystem::path matchedPairsPath = "data/matched_pairs.json";
+    std::filesystem::path teamsPath = "config/teams.json";
 
     double maximumDaysUntilResolution = 2.0;
     std::int64_t kalshiCloseTimeSearchDays = 21;
+    std::int64_t polymarketMoneylineSearchDays = 10;
     std::int64_t rematchIntervalMinutes = 60;
     std::size_t pairsBeforeStreaming = 500;
     std::int64_t maximumMinutesBeforeStreaming = 5;

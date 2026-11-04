@@ -1,17 +1,21 @@
 #include "ingestion/PolymarketMarketCatalog.h"
 
 #include "common/TimeParsing.h"
+#include "ingestion/MarketClassification.h"
 #include "ingestion/UrlEncoding.h"
 
 #include <nlohmann/json.hpp>
 
 #include <chrono>
+#include <cmath>
 #include <stdexcept>
 #include <thread>
 
 namespace kparb {
 
 namespace {
+
+constexpr std::size_t rulesSummaryCharacters = 400;
 
 std::string readString(const nlohmann::json& object, const char* key)
 {
@@ -55,6 +59,24 @@ std::vector<std::string> readEmbeddedStringArray(const nlohmann::json& object, c
     return values;
 }
 
+std::string firstEventTitle(const nlohmann::json& market)
+{
+    const auto events = market.find("events");
+    if (events == market.end() || !events->is_array() || events->empty() || !(*events)[0].is_object()) {
+        return {};
+    }
+    return readString((*events)[0], "title");
+}
+
+std::string summarizeDescription(const std::string& description, std::size_t limit)
+{
+    std::string summary = description.substr(0, description.find("\n\n"));
+    if (summary.size() > limit) {
+        summary.resize(limit);
+    }
+    return summary;
+}
+
 }
 
 PolymarketPage parsePolymarketMarketsPage(std::string_view body, std::vector<MarketInfo>& markets)
@@ -93,14 +115,23 @@ PolymarketPage parsePolymarketMarketsPage(std::string_view body, std::vector<Mar
             info.identifier = readString(market, "id");
         }
         info.eventIdentifier = readString(market, "slug");
+        info.eventTitle = firstEventTitle(market);
         info.title = readString(market, "question");
         info.subtitle = readString(market, "groupItemTitle");
         info.rules = readString(market, "description");
+        info.rulesSummary = summarizeDescription(info.rules, rulesSummaryCharacters);
+        info.marketType = polymarketMarketType(readString(market, "sportsMarketType"));
+        const auto line = market.find("line");
+        if (line != market.end() && line->is_number()) {
+            info.strike = std::fabs(line->get<double>());
+            info.hasStrike = true;
+        }
         info.yesOutcomeName = outcomes[0];
         info.noOutcomeName = outcomes[1];
         info.yesTokenIdentifier = tokens[0];
         info.noTokenIdentifier = tokens[1];
-        info.closeTimeSeconds = parseIsoTimestampSeconds(readString(market, "endDate")).value_or(0);
+        info.resolutionDeadlineSeconds = parseIsoTimestampSeconds(readString(market, "endDate")).value_or(0);
+        info.closeTimeSeconds = parseIsoTimestampSeconds(readString(market, "gameStartTime")).value_or(info.resolutionDeadlineSeconds);
         info.isAcceptingOrders = readBoolean(market, "acceptingOrders", false);
         info.openTimeSeconds = parseIsoTimestampSeconds(readString(market, "acceptingOrdersTimestamp")).value_or(0);
         if (info.openTimeSeconds == 0) {
@@ -139,6 +170,9 @@ std::vector<MarketInfo> PolymarketMarketCatalog::fetchOpenMarkets(const Progress
         }
         if (settings.maximumEndTimestamp > 0) {
             url += "&end_date_max=" + encodeUrlComponent(formatIsoTimestampSeconds(settings.maximumEndTimestamp));
+        }
+        if (!settings.sportsMarketType.empty()) {
+            url += "&sports_market_types=" + encodeUrlComponent(settings.sportsMarketType);
         }
         if (!cursor.empty()) {
             url += "&after_cursor=" + encodeUrlComponent(cursor);

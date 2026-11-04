@@ -22,6 +22,12 @@ TEST(ApplicationConfigTest, ExampleConfigParses)
     EXPECT_EQ(config.engine.minimumEdgeTicks, 5);
     EXPECT_EQ(config.engine.statsIntervalNanos, 10'000'000'000);
     EXPECT_DOUBLE_EQ(config.kalshiTakerFeeRate, 0.07);
+    EXPECT_EQ(config.polymarketMoneylineSearchDays, 10);
+    EXPECT_EQ(config.matcher.concurrentRequests, 8U);
+    EXPECT_EQ(config.matcher.candidates.candidatesPerPolymarketMarket, 3U);
+    EXPECT_TRUE(config.matcher.candidates.requireCompatibleMarketTypes);
+    EXPECT_TRUE(config.matcher.candidates.requireMatchingStrikes);
+    EXPECT_DOUBLE_EQ(config.matcher.minimumConfidence, 0.85);
 }
 
 TEST(ApplicationConfigTest, PartialConfigKeepsDefaults)

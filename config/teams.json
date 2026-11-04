@@ -1,0 +1,58 @@
+{
+  "leagues": [
+    {
+      "name": "nba",
+      "kalshiSeriesPrefix": "KXNBA",
+      "polymarketSlugPrefix": "nba-",
+      "teams": {
+        "ATL": ["Hawks"], "BKN": ["Nets"], "BOS": ["Celtics"], "CHA": ["Hornets"], "CHI": ["Bulls"],
+        "CLE": ["Cavaliers", "Cavs"], "DAL": ["Mavericks", "Mavs"], "DEN": ["Nuggets"], "DET": ["Pistons"], "GSW": ["Warriors"],
+        "HOU": ["Rockets"], "IND": ["Pacers"], "LAC": ["Clippers"], "LAL": ["Lakers"], "MEM": ["Grizzlies"],
+        "MIA": ["Heat"], "MIL": ["Bucks"], "MIN": ["Timberwolves", "Wolves"], "NOP": ["Pelicans"], "NYK": ["Knicks"],
+        "OKC": ["Thunder"], "ORL": ["Magic"], "PHI": ["76ers", "Sixers"], "PHX": ["Suns"], "POR": ["Trail Blazers", "Blazers"],
+        "SAC": ["Kings"], "SAS": ["Spurs"], "TOR": ["Raptors"], "UTA": ["Jazz"], "WAS": ["Wizards"]
+      }
+    },
+    {
+      "name": "nhl",
+      "kalshiSeriesPrefix": "KXNHL",
+      "polymarketSlugPrefix": "nhl-",
+      "teams": {
+        "ANA": ["Ducks"], "BOS": ["Bruins"], "BUF": ["Sabres"], "CAR": ["Hurricanes"], "CBJ": ["Blue Jackets"],
+        "CGY": ["Flames"], "CHI": ["Blackhawks"], "COL": ["Avalanche"], "DAL": ["Stars"], "DET": ["Red Wings"],
+        "EDM": ["Oilers"], "FLA": ["Panthers"], "LA": ["Kings"], "MIN": ["Wild"], "MTL": ["Canadiens"],
+        "NJ": ["Devils"], "NSH": ["Predators"], "NYI": ["Islanders"], "NYR": ["Rangers"], "OTT": ["Senators"],
+        "PHI": ["Flyers"], "PIT": ["Penguins"], "SEA": ["Kraken"], "SJ": ["Sharks"], "STL": ["Blues"],
+        "TB": ["Lightning"], "TOR": ["Maple Leafs"], "UTA": ["Mammoth"], "VAN": ["Canucks"], "VGK": ["Golden Knights"],
+        "WPG": ["Jets"], "WSH": ["Capitals"]
+      }
+    },
+    {
+      "name": "nfl",
+      "kalshiSeriesPrefix": "KXNFL",
+      "polymarketSlugPrefix": "nfl-",
+      "teams": {
+        "ARI": ["Cardinals"], "ATL": ["Falcons"], "BAL": ["Ravens"], "BUF": ["Bills"], "CAR": ["Panthers"],
+        "CHI": ["Bears"], "CIN": ["Bengals"], "CLE": ["Browns"], "DAL": ["Cowboys"], "DEN": ["Broncos"],
+        "DET": ["Lions"], "GB": ["Packers"], "HOU": ["Texans"], "IND": ["Colts"], "JAC": ["Jaguars"],
+        "KC": ["Chiefs"], "LAC": ["Chargers"], "LAR": ["Rams"], "LV": ["Raiders"], "MIA": ["Dolphins"],
+        "MIN": ["Vikings"], "NE": ["Patriots"], "NO": ["Saints"], "NYG": ["Giants"], "NYJ": ["Jets"],
+        "PHI": ["Eagles"], "PIT": ["Steelers"], "SEA": ["Seahawks"], "SF": ["49ers"], "TB": ["Buccaneers"],
+        "TEN": ["Titans"], "WAS": ["Commanders"]
+      }
+    },
+    {
+      "name": "mlb",
+      "kalshiSeriesPrefix": "KXMLB",
+      "polymarketSlugPrefix": "mlb-",
+      "teams": {
+        "ATH": ["Athletics"], "ATL": ["Braves"], "AZ": ["Diamondbacks"], "BAL": ["Orioles"], "BOS": ["Red Sox"],
+        "CHC": ["Cubs"], "CIN": ["Reds"], "CLE": ["Guardians"], "COL": ["Rockies"], "CWS": ["White Sox"],
+        "DET": ["Tigers"], "HOU": ["Astros"], "KC": ["Royals"], "LAA": ["Angels"], "LAD": ["Dodgers"],
+        "MIA": ["Marlins"], "MIL": ["Brewers"], "MIN": ["Twins"], "NYM": ["Mets"], "NYY": ["Yankees"],
+        "PHI": ["Phillies"], "PIT": ["Pirates"], "SD": ["Padres"], "SEA": ["Mariners"], "SF": ["Giants"],
+        "STL": ["Cardinals"], "TB": ["Rays"], "TEX": ["Rangers"], "TOR": ["Blue Jays"], "WSH": ["Nationals"]
+      }
+    }
+  ]
+}

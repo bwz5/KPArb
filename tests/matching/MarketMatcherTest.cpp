@@ -3,9 +3,12 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <thread>
 #include <nlohmann/json.hpp>
 
 namespace kparb {
@@ -58,6 +61,7 @@ protected:
         std::filesystem::create_directories(directory);
         store = std::make_unique<MatchStore>(directory / "cache.json", directory / "manual.json");
         settings.candidates.minimumSimilarity = 0.3;
+        settings.concurrentRequests = 1;
     }
 
     void TearDown() override
@@ -231,6 +235,76 @@ TEST_F(MarketMatcherTest, RepeatedFailuresDisableTheLanguageModel)
     EXPECT_EQ(failing.requestCount, 2);
     EXPECT_TRUE(matcher.lastProgress().isLanguageModelDisabled);
     EXPECT_EQ(store->verdictCount(), 0U);
+}
+
+class ConcurrentLanguageModel final : public LanguageModelClient {
+public:
+    LanguageModelResponse complete(const std::vector<ChatMessage>& messages) override
+    {
+        const int active = ++activeRequests;
+        int previousPeak = peakActiveRequests.load();
+        while (active > previousPeak && !peakActiveRequests.compare_exchange_weak(previousPeak, active)) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        ++requestCount;
+        --activeRequests;
+        const bool isSuperBowl = messages.back().content.find("Super Bowl") != std::string::npos;
+        return {true, isSuperBowl ? R"({"same_event": false, "confidence": 0.9, "reason": "Different"})"
+                                  : R"({"same_event": true, "confidence": 0.95, "reason": "Same"})", ""};
+    }
+
+    std::string modelName() const override
+    {
+        return "concurrent-model";
+    }
+
+    std::atomic<int> activeRequests{0};
+    std::atomic<int> peakActiveRequests{0};
+    std::atomic<int> requestCount{0};
+};
+
+TEST_F(MarketMatcherTest, ConcurrentRequestsRunInParallelAndRecordEveryVerdict)
+{
+    settings.concurrentRequests = 3;
+    store->load();
+    ConcurrentLanguageModel concurrent;
+    MarketMatcher matcher(settings, concurrent, *store, *channel);
+    std::size_t progressCallbacks = 0;
+    const auto pairs = matcher.match(kalshi, polymarket,
+        [&progressCallbacks](const MatcherProgress&, const MarketInfo&, const MarketInfo&, const MatchVerdict&) { ++progressCallbacks; });
+    EXPECT_EQ(concurrent.requestCount.load(), static_cast<int>(matcher.lastProgress().candidatesTotal));
+    EXPECT_GE(concurrent.peakActiveRequests.load(), 2);
+    EXPECT_EQ(store->verdictCount(), matcher.lastProgress().candidatesTotal);
+    EXPECT_EQ(progressCallbacks, matcher.lastProgress().candidatesTotal);
+    EXPECT_EQ(matcher.lastProgress().candidatesProcessed, matcher.lastProgress().candidatesTotal);
+    for (const auto& pair : pairs) {
+        EXPECT_NE(pair.kalshiTicker, "K-SB");
+    }
+}
+
+TEST_F(MarketMatcherTest, CachedVerdictsAreAcceptedBeforeNewRequests)
+{
+    store->load();
+    MatchVerdict cached;
+    cached.isSameEvent = true;
+    cached.confidence = 0.99;
+    store->recordVerdict("K-BTC", "P-BTC", cached);
+    std::vector<std::string> acceptedOrder;
+    MarketMatcher matcher(settings, model, *store, *channel);
+    matcher.match(kalshi, polymarket, {}, [&acceptedOrder](const MatchedPair& pair) { acceptedOrder.push_back(pair.kalshiTicker); });
+    ASSERT_FALSE(acceptedOrder.empty());
+    EXPECT_EQ(acceptedOrder.front(), "K-BTC");
+}
+
+TEST_F(MarketMatcherTest, PromptIncludesPolymarketEventAndDeadline)
+{
+    MarketMatcher matcher(settings, model, *store, *channel);
+    MarketInfo polymarketMarket = polymarket[0];
+    polymarketMarket.eventTitle = "Fed decision in December";
+    polymarketMarket.resolutionDeadlineSeconds = polymarketMarket.closeTimeSeconds + 7 * 86400;
+    const auto messages = matcher.buildMessages(kalshi[0], polymarketMarket);
+    EXPECT_NE(messages[1].content.find("Event: Fed decision in December"), std::string::npos);
+    EXPECT_NE(messages[1].content.find("Resolution deadline:"), std::string::npos);
 }
 
 TEST(VerdictParsingTest, ToleratesFormattingVariations)

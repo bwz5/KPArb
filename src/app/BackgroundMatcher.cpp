@@ -101,10 +101,12 @@ bool BackgroundMatcher::usesLanguageModel() const noexcept
 
 void BackgroundMatcher::run()
 {
-    const auto printProgress = [](const MatcherProgress& progress, const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket,
-                                   const MatchVerdict& verdict) {
-        if (progress.candidatesProcessed == 1) {
+    bool hasPrintedCandidateCount = false;
+    const auto printProgress = [&hasPrintedCandidateCount](const MatcherProgress& progress, const MarketInfo& kalshiMarket,
+                                   const MarketInfo& polymarketMarket, const MatchVerdict& verdict) {
+        if (!hasPrintedCandidateCount) {
             std::cout << "candidate pairs: " << progress.candidatesTotal << '\n';
+            hasPrintedCandidateCount = true;
         }
         const bool isInteresting = verdict.isSameEvent || verdict.reason.rfind("error:", 0) == 0
             || verdict.reason.rfind("waiting", 0) == 0;

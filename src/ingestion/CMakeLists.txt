@@ -6,10 +6,12 @@ add_library(kparb_ingestion STATIC
     KalshiMessageParser.cpp
     KalshiSigner.cpp
     LadderDirectory.cpp
+    MarketClassification.cpp
     MarketFilter.cpp
     PolymarketBookFeed.cpp
     PolymarketMarketCatalog.cpp
     PolymarketMessageParser.cpp
+    TeamDirectory.cpp
     UpdatePublisher.cpp
     UrlEncoding.cpp
     WebSocketBookFeed.cpp

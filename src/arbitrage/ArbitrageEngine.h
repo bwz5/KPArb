@@ -27,6 +27,7 @@ struct EngineCounters {
     std::uint64_t opportunitiesOpened = 0;
     std::uint32_t openOpportunityCount = 0;
     std::uint32_t synchronizedLadderCount = 0;
+    std::uint32_t peakSynchronizedLadderCount = 0;
 };
 
 class ArbitrageEngine final {

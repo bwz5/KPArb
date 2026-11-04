@@ -1,5 +1,7 @@
 #include "arbitrage/ArbitrageEngine.h"
 
+#include <algorithm>
+
 #include "common/Clock.h"
 #include "common/CpuRelax.h"
 
@@ -95,6 +97,8 @@ void ArbitrageEngine::applyUpdate(const LadderUpdate& update) noexcept
         if (!target.isSynchronized) {
             target.isSynchronized = true;
             ++engineCounters.synchronizedLadderCount;
+            engineCounters.peakSynchronizedLadderCount
+                = std::max(engineCounters.peakSynchronizedLadderCount, engineCounters.synchronizedLadderCount);
         }
         break;
     case UpdateKind::SetLevel:

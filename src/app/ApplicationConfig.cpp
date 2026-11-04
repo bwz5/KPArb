@@ -79,6 +79,10 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
 
     const auto matching = sectionOf(document, "matching");
     readInto(matching, "candidatesPerMarket", config.matcher.candidates.candidatesPerMarket);
+    readInto(matching, "candidatesPerPolymarketMarket", config.matcher.candidates.candidatesPerPolymarketMarket);
+    readInto(matching, "requireCompatibleMarketTypes", config.matcher.candidates.requireCompatibleMarketTypes);
+    readInto(matching, "requireMatchingStrikes", config.matcher.candidates.requireMatchingStrikes);
+    readInto(matching, "concurrentRequests", config.matcher.concurrentRequests);
     readInto(matching, "minimumSimilarity", config.matcher.candidates.minimumSimilarity);
     std::int64_t maximumCloseTimeDifferenceDays = config.matcher.candidates.maximumCloseTimeDifferenceSeconds / 86400;
     readInto(matching, "maximumCloseTimeDifferenceDays", maximumCloseTimeDifferenceDays);
@@ -92,6 +96,8 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readPathInto(matching, "cachePath", config.matchCachePath);
     readPathInto(matching, "manualMatchesPath", config.manualMatchesPath);
     readPathInto(matching, "matchedPairsPath", config.matchedPairsPath);
+    readPathInto(matching, "teamsPath", config.teamsPath);
+    readInto(matching, "sharedTeamBonus", config.matcher.candidates.sharedTeamBonus);
 
     const auto arbitrage = sectionOf(document, "arbitrage");
     readInto(arbitrage, "minimumEdgeTicks", config.engine.minimumEdgeTicks);
@@ -107,6 +113,7 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     const auto discovery = sectionOf(document, "discovery");
     readInto(discovery, "maximumDaysUntilResolution", config.maximumDaysUntilResolution);
     readInto(discovery, "kalshiCloseTimeSearchDays", config.kalshiCloseTimeSearchDays);
+    readInto(discovery, "polymarketMoneylineSearchDays", config.polymarketMoneylineSearchDays);
     readInto(discovery, "rematchIntervalMinutes", config.rematchIntervalMinutes);
     readInto(discovery, "pairsBeforeStreaming", config.pairsBeforeStreaming);
     readInto(discovery, "maximumMinutesBeforeStreaming", config.maximumMinutesBeforeStreaming);

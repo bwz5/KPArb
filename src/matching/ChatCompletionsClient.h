@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <string>
 
 namespace kparb {
@@ -13,7 +14,7 @@ struct ChatCompletionsSettings {
     std::string baseUrl = "https://api.groq.com/openai/v1";
     std::string model = "openai/gpt-oss-120b";
     std::string apiKey;
-    double requestsPerMinute = 10.0;
+    double requestsPerMinute = 250.0;
     int maximumAttempts = 6;
     int maximumOutputTokens = 400;
     std::string reasoningEffort = "low";
@@ -35,7 +36,7 @@ private:
     void waitForRateLimit();
 
     ChatCompletionsSettings settings;
-    HttpClient httpClient;
+    std::mutex rateLimitMutex;
     std::chrono::steady_clock::time_point nextAllowedRequest = std::chrono::steady_clock::now();
 };
 

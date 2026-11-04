@@ -19,9 +19,10 @@ extern "C" void handleShutdownSignal(int)
 
 void printUsage()
 {
-    std::cout << "usage: kparb [--config path] [--match-only | --use-saved-pairs] [--duration-seconds n]\n"
+    std::cout << "usage: kparb [--config path] [--match-only | --use-saved-pairs | --candidates-only] [--duration-seconds n]\n"
                  "  --config path          configuration file (default config/config.json, optional)\n"
                  "  --match-only           discover and match markets, save pairs, then exit\n"
+                 "  --candidates-only      discover markets and write candidate pairs to data/candidates.tsv without the language model\n"
                  "  --use-saved-pairs      skip discovery and matching and stream the saved pairs\n"
                  "  --duration-seconds n   stop streaming after n seconds\n";
 }
@@ -39,6 +40,8 @@ int main(int argumentCount, char** arguments)
             options.configPath = arguments[++index];
         } else if (argument == "--match-only") {
             options.mode = kparb::RunMode::MatchOnly;
+        } else if (argument == "--candidates-only") {
+            options.mode = kparb::RunMode::CandidatesOnly;
         } else if (argument == "--use-saved-pairs") {
             options.mode = kparb::RunMode::TradeSavedPairs;
         } else if (argument == "--duration-seconds" && index + 1 < argumentCount) {

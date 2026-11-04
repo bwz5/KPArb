@@ -26,7 +26,7 @@
   "languageModel": {
     "baseUrl": "https://api.groq.com/openai/v1",
     "model": "openai/gpt-oss-120b",
-    "requestsPerMinute": 10,
+    "requestsPerMinute": 250,
     "maximumAttempts": 6,
     "maximumOutputTokens": 400,
     "reasoningEffort": "low",
@@ -36,24 +36,31 @@
   "discovery": {
     "maximumDaysUntilResolution": 2,
     "kalshiCloseTimeSearchDays": 21,
+    "polymarketMoneylineSearchDays": 10,
     "rematchIntervalMinutes": 60,
     "pairsBeforeStreaming": 500,
     "maximumMinutesBeforeStreaming": 5,
     "pairsBetweenStreamRestarts": 25
   },
   "matching": {
-    "candidatesPerMarket": 2,
+    "candidatesPerMarket": 3,
+    "candidatesPerPolymarketMarket": 3,
+    "requireCompatibleMarketTypes": true,
+    "requireMatchingStrikes": true,
     "minimumSimilarity": 0.45,
     "maximumCloseTimeDifferenceDays": 2,
     "requireCompatibleNumbers": true,
     "minimumConfidence": 0.85,
-    "maximumLanguageModelRequests": 900,
+    "maximumLanguageModelRequests": 20000,
+    "concurrentRequests": 8,
     "maximumRulesCharacters": 800,
     "maximumConsecutiveFailures": 5,
     "maximumQuotaWaitSeconds": 900,
     "cachePath": "data/match_cache.json",
     "manualMatchesPath": "data/manual_matches.json",
-    "matchedPairsPath": "data/matched_pairs.json"
+    "matchedPairsPath": "data/matched_pairs.json",
+    "teamsPath": "config/teams.json",
+    "sharedTeamBonus": 0.25
   },
   "arbitrage": {
     "minimumEdgeTicks": 5,

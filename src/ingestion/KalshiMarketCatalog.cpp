@@ -1,6 +1,7 @@
 #include "ingestion/KalshiMarketCatalog.h"
 
 #include "common/TimeParsing.h"
+#include "ingestion/MarketClassification.h"
 #include "ingestion/UrlEncoding.h"
 
 #include <nlohmann/json.hpp>
@@ -20,6 +21,26 @@ std::string readString(const nlohmann::json& object, const char* key)
         return {};
     }
     return found->get<std::string>();
+}
+
+bool readNumber(const nlohmann::json& object, const char* key, double& destination)
+{
+    const auto found = object.find(key);
+    if (found == object.end() || !found->is_number()) {
+        return false;
+    }
+    destination = found->get<double>();
+    return true;
+}
+
+void readStrike(const nlohmann::json& market, MarketInfo& info)
+{
+    const std::string strikeType = readString(market, "strike_type");
+    if (strikeType == "greater" || strikeType == "greater_or_equal") {
+        info.hasStrike = readNumber(market, "floor_strike", info.strike);
+    } else if (strikeType == "less" || strikeType == "less_or_equal") {
+        info.hasStrike = readNumber(market, "cap_strike", info.strike);
+    }
 }
 
 std::int64_t readTimestamp(const nlohmann::json& object, const char* key)
@@ -53,6 +74,9 @@ std::string parseKalshiMarketsPage(std::string_view body, std::vector<MarketInfo
                 info.subtitle = readString(market, "subtitle");
             }
             info.rules = readString(market, "rules_primary");
+            info.rulesSummary = info.rules;
+            info.marketType = kalshiMarketType(info.eventIdentifier);
+            readStrike(market, info);
             const std::string secondaryRules = readString(market, "rules_secondary");
             if (!secondaryRules.empty()) {
                 info.rules += "\n" + secondaryRules;
@@ -63,8 +87,9 @@ std::string parseKalshiMarketsPage(std::string_view body, std::vector<MarketInfo
             info.isAcceptingOrders = status == "active" || status == "open";
             info.openTimeSeconds = readTimestamp(market, "open_time");
             info.closeTimeSeconds = readTimestamp(market, "expected_expiration_time");
+            info.resolutionDeadlineSeconds = readTimestamp(market, "close_time");
             if (info.closeTimeSeconds == 0) {
-                info.closeTimeSeconds = readTimestamp(market, "close_time");
+                info.closeTimeSeconds = info.resolutionDeadlineSeconds;
             }
             markets.push_back(std::move(info));
         }

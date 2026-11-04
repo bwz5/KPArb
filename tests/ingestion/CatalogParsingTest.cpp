@@ -66,5 +66,52 @@ TEST(CatalogParsingTest, ParsesPolymarketKeysetEnvelope)
     EXPECT_EQ(markets[0].noTokenIdentifier, "b");
 }
 
+TEST(CatalogParsingTest, ParsesPolymarketSportsStructure)
+{
+    std::vector<MarketInfo> markets;
+    const std::string body = R"json({"markets":[
+        {"question":"KK Bosna vs. Balkan","conditionId":"0xmoney","outcomes":"[\"KK Bosna\",\"Balkan\"]","clobTokenIds":"[\"a\",\"b\"]",
+         "sportsMarketType":"moneyline","gameStartTime":"2026-11-04 18:30:00+00","endDate":"2026-11-11T18:30:00Z",
+         "description":"In the upcoming EuroCup game between KK Bosna and Balkan.\n\nThis market resolves to the winner.",
+         "events":[{"title":"KK Bosna vs. Balkan"}]},
+        {"question":"Spread: KK Bosna (-7.5)","conditionId":"0xspread","outcomes":"[\"KK Bosna\",\"Balkan\"]","clobTokenIds":"[\"c\",\"d\"]",
+         "sportsMarketType":"spreads","line":-7.5,"endDate":"2026-11-04T18:30:00Z"}
+    ]})json";
+    parsePolymarketMarketsPage(body, markets);
+    ASSERT_EQ(markets.size(), 2U);
+    EXPECT_EQ(markets[0].marketType, "winner");
+    EXPECT_EQ(markets[0].eventTitle, "KK Bosna vs. Balkan");
+    EXPECT_EQ(markets[0].rulesSummary, "In the upcoming EuroCup game between KK Bosna and Balkan.");
+    EXPECT_EQ(markets[0].closeTimeSeconds, 1793817000);
+    EXPECT_EQ(markets[0].resolutionDeadlineSeconds, 1793817000 + 7 * 86400);
+    EXPECT_FALSE(markets[0].hasStrike);
+    EXPECT_EQ(markets[1].marketType, "spread");
+    EXPECT_TRUE(markets[1].hasStrike);
+    EXPECT_DOUBLE_EQ(markets[1].strike, 7.5);
+    EXPECT_EQ(markets[1].closeTimeSeconds, markets[1].resolutionDeadlineSeconds);
+}
+
+TEST(CatalogParsingTest, ParsesKalshiStrikesAndSeriesType)
+{
+    std::vector<MarketInfo> markets;
+    const std::string body = R"({"markets":[
+        {"ticker":"KXNBATOTAL-26NOV04ATLWAS-225","event_ticker":"KXNBATOTAL-26NOV04ATLWAS","title":"Over 225.5 points",
+         "rules_primary":"If Atlanta and Washington combine for more than 225.5 points, then the market resolves to Yes.",
+         "strike_type":"greater","floor_strike":225.5,"status":"active"},
+        {"ticker":"KXHIGHNY-26NOV04-T50","event_ticker":"KXHIGHNY-26NOV04","title":"High below 50","strike_type":"less","cap_strike":50},
+        {"ticker":"KXGAME-X-TTS","event_ticker":"KXEUROCUPGAME-X","title":"Turk Telekom wins","strike_type":"structured"}
+    ],"cursor":""})";
+    parseKalshiMarketsPage(body, markets);
+    ASSERT_EQ(markets.size(), 3U);
+    EXPECT_EQ(markets[0].marketType, "total");
+    EXPECT_TRUE(markets[0].hasStrike);
+    EXPECT_DOUBLE_EQ(markets[0].strike, 225.5);
+    EXPECT_EQ(markets[0].rulesSummary, markets[0].rules);
+    EXPECT_TRUE(markets[1].hasStrike);
+    EXPECT_DOUBLE_EQ(markets[1].strike, 50.0);
+    EXPECT_EQ(markets[2].marketType, "winner");
+    EXPECT_FALSE(markets[2].hasStrike);
+}
+
 }
 }

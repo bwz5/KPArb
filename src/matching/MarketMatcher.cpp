@@ -7,9 +7,9 @@
 #include <chrono>
 #include <thread>
 
+#include <algorithm>
 #include <cstdlib>
 #include <ctime>
-#include <set>
 #include <unordered_map>
 
 namespace kparb {
@@ -62,12 +62,18 @@ std::vector<ChatMessage> MarketMatcher::buildMessages(const MarketInfo& kalshiMa
     user += "Rules: " + truncate(kalshiMarket.rules, settings.maximumRulesCharacters) + "\n\n";
 
     user += "Market B (Polymarket)\n";
+    if (!polymarketMarket.eventTitle.empty() && polymarketMarket.eventTitle != polymarketMarket.title) {
+        user += "Event: " + polymarketMarket.eventTitle + "\n";
+    }
     user += "Question: " + polymarketMarket.title + "\n";
     if (!polymarketMarket.subtitle.empty()) {
         user += "Option: " + polymarketMarket.subtitle + "\n";
     }
     user += "First outcome: \"" + polymarketMarket.yesOutcomeName + "\"; second outcome: \"" + polymarketMarket.noOutcomeName + "\"\n";
-    user += "End date: " + formatDate(polymarketMarket.closeTimeSeconds) + "\n";
+    user += "Event time: " + formatDate(polymarketMarket.closeTimeSeconds) + "\n";
+    if (polymarketMarket.resolutionDeadlineSeconds > 0 && polymarketMarket.resolutionDeadlineSeconds != polymarketMarket.closeTimeSeconds) {
+        user += "Resolution deadline: " + formatDate(polymarketMarket.resolutionDeadlineSeconds) + "\n";
+    }
     user += "Rules: " + truncate(polymarketMarket.rules, settings.maximumRulesCharacters) + "\n\n";
 
     user +=
@@ -174,6 +180,116 @@ void MarketMatcher::requestStop() noexcept
     stopRequested.store(true, std::memory_order_release);
 }
 
+void MarketMatcher::reportProgress(MatchRun& run, const CandidatePair& candidate, const MatchVerdict& verdict)
+{
+    if (run.onProgress) {
+        run.onProgress(progress, run.kalshiMarkets[candidate.kalshiIndex], run.polymarketMarkets[candidate.polymarketIndex], verdict);
+    }
+}
+
+void MarketMatcher::acceptIfMatched(MatchRun& run, const CandidatePair& candidate, const MatchVerdict& verdict)
+{
+    const MarketInfo& kalshiMarket = run.kalshiMarkets[candidate.kalshiIndex];
+    const MarketInfo& polymarketMarket = run.polymarketMarkets[candidate.polymarketIndex];
+    if (verdict.isSameEvent && verdict.confidence >= settings.minimumConfidence
+        && run.accepted.emplace(kalshiMarket.identifier, polymarketMarket.identifier).second) {
+        run.pairs.push_back(makePair(kalshiMarket, polymarketMarket, verdict.isInverted, verdict.confidence));
+        ++progress.pairsAccepted;
+        if (run.onPairAccepted) {
+            run.onPairAccepted(run.pairs.back());
+        }
+        logEvent(MatchEventCode::PairAccepted, static_cast<std::int64_t>(run.pairs.size() - 1),
+            static_cast<std::int64_t>(candidate.score * 1000.0), static_cast<std::int64_t>(verdict.confidence * 1000.0));
+    }
+    reportProgress(run, candidate, verdict);
+}
+
+void MarketMatcher::askLanguageModel(MatchRun& run, const CandidatePair& candidate)
+{
+    const MarketInfo& kalshiMarket = run.kalshiMarkets[candidate.kalshiIndex];
+    const MarketInfo& polymarketMarket = run.polymarketMarkets[candidate.polymarketIndex];
+    const std::vector<ChatMessage> messages = buildMessages(kalshiMarket, polymarketMarket);
+    LanguageModelResponse response = model.complete(messages);
+    while (!response.succeeded && response.retryAfterSeconds > 0 && response.retryAfterSeconds <= settings.maximumQuotaWaitSeconds) {
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex);
+            ++progress.quotaWaits;
+            MatchVerdict waiting;
+            waiting.reason = "waiting " + std::to_string(response.retryAfterSeconds) + "s for language model quota";
+            reportProgress(run, candidate, waiting);
+        }
+        if (!waitUnlessStopped(response.retryAfterSeconds)) {
+            return;
+        }
+        response = model.complete(messages);
+    }
+
+    const std::lock_guard<std::mutex> lock(stateMutex);
+    if (stopRequested.load(std::memory_order_acquire) && !response.succeeded) {
+        return;
+    }
+    ++progress.candidatesProcessed;
+    const auto kalshiIndex = static_cast<std::int64_t>(candidate.kalshiIndex);
+    const auto polymarketIndex = static_cast<std::int64_t>(candidate.polymarketIndex);
+    if (!response.succeeded) {
+        logEvent(MatchEventCode::LanguageModelFailure, kalshiIndex, polymarketIndex, static_cast<std::int64_t>(candidate.score * 1000.0));
+        if (++run.consecutiveFailures >= settings.maximumConsecutiveFailures) {
+            progress.isLanguageModelDisabled = true;
+        }
+        MatchVerdict failed;
+        failed.reason = "error: " + response.errorMessage;
+        reportProgress(run, candidate, failed);
+        return;
+    }
+    run.consecutiveFailures = 0;
+    std::optional<MatchVerdict> verdict = parseVerdict(response.content);
+    if (!verdict) {
+        logEvent(MatchEventCode::LanguageModelFailure, kalshiIndex, polymarketIndex, -1);
+        return;
+    }
+    verdict->model = model.modelName();
+    verdict->decidedAtSeconds = wallClockSeconds();
+    store.recordVerdict(kalshiMarket.identifier, polymarketMarket.identifier, *verdict);
+    logEvent(MatchEventCode::VerdictFromLanguageModel, kalshiIndex, polymarketIndex, verdict->isSameEvent ? 1 : 0);
+    if (++run.unsavedVerdicts >= settings.saveInterval) {
+        store.save();
+        run.unsavedVerdicts = 0;
+    }
+    acceptIfMatched(run, candidate, *verdict);
+}
+
+void MarketMatcher::processPendingCandidates(MatchRun& run, const std::vector<std::size_t>& pending)
+{
+    std::atomic<std::size_t> nextPending{0};
+    const auto work = [&] {
+        while (!stopRequested.load(std::memory_order_acquire)) {
+            const std::size_t slot = nextPending.fetch_add(1, std::memory_order_relaxed);
+            if (slot >= pending.size()) {
+                return;
+            }
+            {
+                const std::lock_guard<std::mutex> lock(stateMutex);
+                if (progress.isLanguageModelDisabled || progress.languageModelRequests >= settings.maximumLanguageModelRequests) {
+                    return;
+                }
+                ++progress.languageModelRequests;
+            }
+            askLanguageModel(run, run.candidates[pending[slot]]);
+        }
+    };
+    const std::size_t workerCount = std::min(std::max<std::size_t>(settings.concurrentRequests, 1), pending.size());
+    std::vector<std::thread> workers;
+    for (std::size_t worker = 1; worker < workerCount; ++worker) {
+        workers.emplace_back(work);
+    }
+    if (workerCount > 0) {
+        work();
+    }
+    for (std::thread& worker : workers) {
+        worker.join();
+    }
+}
+
 std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kalshiMarkets, const std::vector<MarketInfo>& polymarketMarkets,
     const ProgressCallback& onProgress, const PairCallback& onPairAccepted)
 {
@@ -183,97 +299,34 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
 
     progress = MatcherProgress{};
     progress.candidatesTotal = candidates.size();
-    std::vector<MatchedPair> pairs;
-    std::set<std::pair<std::string, std::string>> accepted;
-    std::size_t unsavedVerdicts = 0;
-    std::size_t consecutiveFailures = 0;
+    MatchRun run{kalshiMarkets, polymarketMarkets, candidates, onProgress, onPairAccepted, {}, {}, 0, 0};
+    std::vector<std::size_t> pending;
 
-    for (const CandidatePair& candidate : candidates) {
-        if (stopRequested.load(std::memory_order_acquire)) {
-            break;
-        }
+    for (std::size_t candidateIndex = 0; candidateIndex < candidates.size(); ++candidateIndex) {
+        const CandidatePair& candidate = candidates[candidateIndex];
         const MarketInfo& kalshiMarket = kalshiMarkets[candidate.kalshiIndex];
         const MarketInfo& polymarketMarket = polymarketMarkets[candidate.polymarketIndex];
-        ++progress.candidatesProcessed;
         if (store.isManuallyExcluded(kalshiMarket.identifier, polymarketMarket.identifier)) {
+            ++progress.candidatesProcessed;
             continue;
         }
-
-        std::optional<MatchVerdict> verdict = store.findVerdict(kalshiMarket.identifier, polymarketMarket.identifier);
-        const auto similarityPermille = static_cast<std::int64_t>(candidate.similarity * 1000.0);
-        if (verdict) {
-            logEvent(MatchEventCode::VerdictFromCache, static_cast<std::int64_t>(candidate.kalshiIndex),
-                static_cast<std::int64_t>(candidate.polymarketIndex), verdict->isSameEvent ? 1 : 0);
-        } else {
-            if (progress.isLanguageModelDisabled || progress.languageModelRequests >= settings.maximumLanguageModelRequests) {
-                continue;
-            }
-            ++progress.languageModelRequests;
-            LanguageModelResponse response = model.complete(buildMessages(kalshiMarket, polymarketMarket));
-            while (!response.succeeded && response.retryAfterSeconds > 0
-                && response.retryAfterSeconds <= settings.maximumQuotaWaitSeconds) {
-                ++progress.quotaWaits;
-                if (onProgress) {
-                    MatchVerdict waiting;
-                    waiting.reason = "waiting " + std::to_string(response.retryAfterSeconds) + "s for language model quota";
-                    onProgress(progress, kalshiMarket, polymarketMarket, waiting);
-                }
-                if (!waitUnlessStopped(response.retryAfterSeconds)) {
-                    break;
-                }
-                response = model.complete(buildMessages(kalshiMarket, polymarketMarket));
-            }
-            if (stopRequested.load(std::memory_order_acquire) && !response.succeeded) {
-                break;
-            }
-            if (!response.succeeded) {
-                logEvent(MatchEventCode::LanguageModelFailure, static_cast<std::int64_t>(candidate.kalshiIndex),
-                    static_cast<std::int64_t>(candidate.polymarketIndex), similarityPermille);
-                if (++consecutiveFailures >= settings.maximumConsecutiveFailures) {
-                    progress.isLanguageModelDisabled = true;
-                }
-                MatchVerdict failed;
-                failed.reason = "error: " + response.errorMessage;
-                if (onProgress) {
-                    onProgress(progress, kalshiMarket, polymarketMarket, failed);
-                }
-                continue;
-            }
-            consecutiveFailures = 0;
-            verdict = parseVerdict(response.content);
-            if (!verdict) {
-                logEvent(MatchEventCode::LanguageModelFailure, static_cast<std::int64_t>(candidate.kalshiIndex),
-                    static_cast<std::int64_t>(candidate.polymarketIndex), -1);
-                continue;
-            }
-            verdict->model = model.modelName();
-            verdict->decidedAtSeconds = wallClockSeconds();
-            store.recordVerdict(kalshiMarket.identifier, polymarketMarket.identifier, *verdict);
-            logEvent(MatchEventCode::VerdictFromLanguageModel, static_cast<std::int64_t>(candidate.kalshiIndex),
-                static_cast<std::int64_t>(candidate.polymarketIndex), verdict->isSameEvent ? 1 : 0);
-            if (++unsavedVerdicts >= settings.saveInterval) {
-                store.save();
-                unsavedVerdicts = 0;
-            }
+        const std::optional<MatchVerdict> verdict = store.findVerdict(kalshiMarket.identifier, polymarketMarket.identifier);
+        if (!verdict) {
+            pending.push_back(candidateIndex);
+            continue;
         }
-
-        if (verdict->isSameEvent && verdict->confidence >= settings.minimumConfidence
-            && accepted.emplace(kalshiMarket.identifier, polymarketMarket.identifier).second) {
-            pairs.push_back(makePair(kalshiMarket, polymarketMarket, verdict->isInverted, verdict->confidence));
-            ++progress.pairsAccepted;
-            if (onPairAccepted) {
-                onPairAccepted(pairs.back());
-            }
-            logEvent(MatchEventCode::PairAccepted, static_cast<std::int64_t>(pairs.size() - 1), similarityPermille,
-                static_cast<std::int64_t>(verdict->confidence * 1000.0));
-        }
-        if (onProgress) {
-            onProgress(progress, kalshiMarket, polymarketMarket, *verdict);
-        }
+        ++progress.candidatesProcessed;
+        logEvent(MatchEventCode::VerdictFromCache, static_cast<std::int64_t>(candidate.kalshiIndex),
+            static_cast<std::int64_t>(candidate.polymarketIndex), verdict->isSameEvent ? 1 : 0);
+        acceptIfMatched(run, candidate, *verdict);
     }
-    if (unsavedVerdicts > 0) {
+
+    processPendingCandidates(run, pending);
+    if (run.unsavedVerdicts > 0) {
         store.save();
     }
+    std::vector<MatchedPair>& pairs = run.pairs;
+    std::set<std::pair<std::string, std::string>>& accepted = run.accepted;
 
     std::unordered_map<std::string, const MarketInfo*> kalshiByTicker;
     for (const MarketInfo& market : kalshiMarkets) {

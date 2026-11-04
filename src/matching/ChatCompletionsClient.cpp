@@ -66,13 +66,15 @@ LanguageModelResponse ChatCompletionsClient::parseResponseBody(const std::string
 
 void ChatCompletionsClient::waitForRateLimit()
 {
-    const auto now = std::chrono::steady_clock::now();
-    if (now < nextAllowedRequest) {
-        std::this_thread::sleep_until(nextAllowedRequest);
-    }
     const double intervalSeconds = settings.requestsPerMinute > 0.0 ? 60.0 / settings.requestsPerMinute : 0.0;
-    nextAllowedRequest = std::chrono::steady_clock::now()
-        + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(intervalSeconds));
+    const auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(intervalSeconds));
+    std::chrono::steady_clock::time_point slot;
+    {
+        const std::lock_guard<std::mutex> lock(rateLimitMutex);
+        slot = std::max(std::chrono::steady_clock::now(), nextAllowedRequest);
+        nextAllowedRequest = slot + interval;
+    }
+    std::this_thread::sleep_until(slot);
 }
 
 LanguageModelResponse ChatCompletionsClient::complete(const std::vector<ChatMessage>& messages)
@@ -84,6 +86,7 @@ LanguageModelResponse ChatCompletionsClient::complete(const std::vector<ChatMess
         headers.emplace_back("Authorization", "Bearer " + settings.apiKey);
     }
 
+    HttpClient httpClient;
     LanguageModelResponse lastFailure;
     for (int attempt = 0; attempt < settings.maximumAttempts; ++attempt) {
         waitForRateLimit();

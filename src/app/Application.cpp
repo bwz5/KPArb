@@ -14,9 +14,12 @@
 #include "ingestion/MarketFilter.h"
 #include "ingestion/PolymarketBookFeed.h"
 #include "ingestion/PolymarketMarketCatalog.h"
+#include "ingestion/TeamDirectory.h"
 #include "logging/BinaryLogger.h"
 #include "logging/RecordFormatting.h"
 #include "logging/RecordTypes.h"
+#include "matching/CandidateFinder.h"
+#include "matching/MatchStore.h"
 
 #if defined(__APPLE__)
 #include <pthread/qos.h>
@@ -29,6 +32,7 @@
 #include <memory>
 #include <sstream>
 #include <thread>
+#include <unordered_set>
 
 namespace kparb {
 
@@ -148,8 +152,18 @@ int Application::run(const std::atomic<bool>& shutdownRequested)
                                                              : Clock::time_point::max();
     int exitCode = 0;
     try {
-        exitCode = options.mode == RunMode::TradeSavedPairs ? runSavedPairs(channels, overallDeadline, shutdownRequested)
-                                                            : runDiscoveryCycles(channels, overallDeadline, shutdownRequested);
+        switch (options.mode) {
+        case RunMode::TradeSavedPairs:
+            exitCode = runSavedPairs(channels, overallDeadline, shutdownRequested);
+            break;
+        case RunMode::CandidatesOnly:
+            exitCode = runCandidatesOnly(channels);
+            break;
+        case RunMode::DiscoverMatchAndTrade:
+        case RunMode::MatchOnly:
+            exitCode = runDiscoveryCycles(channels, overallDeadline, shutdownRequested);
+            break;
+        }
     } catch (const std::exception& error) {
         std::cerr << "fatal: " << error.what() << '\n';
         exitCode = 1;
@@ -158,6 +172,35 @@ int Application::run(const std::atomic<bool>& shutdownRequested)
     logger.stop();
     std::cout << "wrote " << logger.recordsWritten() << " log records, dropped " << logger.droppedRecordCount() << '\n';
     return exitCode;
+}
+
+int Application::runCandidatesOnly(LogChannels& channels)
+{
+    const DiscoveredMarkets markets = discoverMarkets(channels.application);
+    MatchStore store(config.matchCachePath, config.manualMatchesPath);
+    store.load();
+    const CandidateFinder finder(markets.polymarket, config.matcher.candidates);
+    const std::vector<CandidatePair> candidates = finder.findCandidates(markets.kalshi);
+
+    std::filesystem::create_directories(options.candidatesPath.parent_path());
+    std::ofstream file(options.candidatesPath);
+    file << "score\tcached_verdict\tkalshi_ticker\tkalshi_text\tpolymarket_slug\tpolymarket_text\n";
+    std::size_t cachedMatches = 0;
+    std::size_t cachedRejections = 0;
+    for (const CandidatePair& candidate : candidates) {
+        const MarketInfo& kalshiMarket = markets.kalshi[candidate.kalshiIndex];
+        const MarketInfo& polymarketMarket = markets.polymarket[candidate.polymarketIndex];
+        const auto verdict = store.findVerdict(kalshiMarket.identifier, polymarketMarket.identifier);
+        const char* verdictText = !verdict ? "unknown" : verdict->isSameEvent ? "match" : "different";
+        cachedMatches += verdict && verdict->isSameEvent ? 1 : 0;
+        cachedRejections += verdict && !verdict->isSameEvent ? 1 : 0;
+        file << candidate.score << '\t' << verdictText << '\t' << kalshiMarket.identifier << '\t' << matchingTextFor(kalshiMarket) << '\t'
+             << polymarketMarket.eventIdentifier << '\t' << matchingTextFor(polymarketMarket) << '\n';
+    }
+    std::cout << "candidate pairs: " << candidates.size() << " (cached matches " << cachedMatches << ", cached rejections "
+              << cachedRejections << ", unknown " << candidates.size() - cachedMatches - cachedRejections << ")\n"
+              << "wrote " << options.candidatesPath.string() << '\n';
+    return 0;
 }
 
 int Application::runSavedPairs(LogChannels& channels, Clock::time_point overallDeadline, const std::atomic<bool>& shutdownRequested)
@@ -297,13 +340,31 @@ DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel)
     PolymarketCatalogSettings polymarketSettings = config.polymarketCatalog;
     polymarketSettings.minimumEndTimestamp = window.earliestSeconds;
     polymarketSettings.maximumEndTimestamp = window.latestSeconds;
-    std::cout << "fetching Polymarket markets...\n";
-    PolymarketMarketCatalog polymarketCatalog(polymarketSettings, httpClient);
-    auto polymarketFetched = polymarketCatalog.fetchOpenMarkets([](std::size_t pages, std::size_t markets) {
+    const auto printPolymarketProgress = [](std::size_t pages, std::size_t markets) {
         if (pages % 25 == 0) {
             std::cout << "  polymarket pages=" << pages << " markets=" << markets << '\n';
         }
-    });
+    };
+    std::cout << "fetching Polymarket markets...\n";
+    auto polymarketFetched = PolymarketMarketCatalog(polymarketSettings, httpClient).fetchOpenMarkets(printPolymarketProgress);
+
+    PolymarketCatalogSettings moneylineSettings = polymarketSettings;
+    moneylineSettings.maximumEndTimestamp = std::max(window.latestSeconds, nowSeconds + config.polymarketMoneylineSearchDays * 86400);
+    moneylineSettings.sportsMarketType = "moneyline";
+    std::cout << "fetching Polymarket moneylines that settle after the game...\n";
+    auto moneylines = PolymarketMarketCatalog(moneylineSettings, httpClient).fetchOpenMarkets(printPolymarketProgress);
+    std::unordered_set<std::string> knownIdentifiers;
+    for (const MarketInfo& market : polymarketFetched) {
+        knownIdentifiers.insert(market.identifier);
+    }
+    for (MarketInfo& market : moneylines) {
+        if (knownIdentifiers.insert(market.identifier).second) {
+            polymarketFetched.push_back(std::move(market));
+        }
+    }
+    const TeamDirectory teams = TeamDirectory::load(config.teamsPath);
+    teams.annotate(markets.kalshi);
+    teams.annotate(polymarketFetched);
     const std::size_t polymarketFetchedCount = polymarketFetched.size();
     markets.polymarket = keepOpenMarketsResolvingWithin(std::move(polymarketFetched), window);
     writeMatchEvent(applicationChannel, MatchEventCode::PolymarketCatalogLoaded, static_cast<std::int64_t>(markets.polymarket.size()),
@@ -402,8 +463,8 @@ StreamOutcome Application::streamAndDetect(const std::vector<MatchedPair>& pairs
 
     const EngineCounters& counters = engine->counters();
     std::cout << "session summary: updates applied=" << counters.updatesApplied << " evaluations=" << counters.pairEvaluations
-              << " opportunities opened=" << counters.opportunitiesOpened << " synchronized ladders="
-              << counters.synchronizedLadderCount << '/' << pairCount * laddersPerPair << '\n';
+              << " opportunities opened=" << counters.opportunitiesOpened << " peak synchronized ladders="
+              << counters.peakSynchronizedLadderCount << '/' << pairCount * laddersPerPair << '\n';
     return outcome;
 }
 

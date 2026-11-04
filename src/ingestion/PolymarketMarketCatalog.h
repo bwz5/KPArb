@@ -23,6 +23,7 @@ struct PolymarketCatalogSettings {
     std::size_t maximumPages = 2000;
     std::int64_t minimumEndTimestamp = 0;
     std::int64_t maximumEndTimestamp = 0;
+    std::string sportsMarketType;
 };
 
 class PolymarketMarketCatalog {

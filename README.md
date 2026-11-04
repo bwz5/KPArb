@@ -1,18 +1,27 @@
 # KPArb
 
-Detects arbitrage between equivalent Kalshi and Polymarket binary markets. It only detects and logs opportunities; it never places orders.
+Detects arbitrage between equivalent Kalshi and Polymarket binary markets.
 
 ## How it works
 
 1. **Ingestion** (`src/ingestion`) downloads every open binary market from the Kalshi REST API and the Polymarket Gamma API. It then streams order books over the Kalshi WebSocket (signed with your API key) and the Polymarket market WebSocket.
-2. **Matching** (`src/matching`) finds candidate pairs with a TF-IDF index. A candidate must have a close date within a window of the other market's, and numeric thresholds that agree. An open-weights LLM behind an OpenAI-compatible API (Groq `openai/gpt-oss-120b` by default) then confirms that each pair settles on the same outcome, and which way round the outcomes line up. Every verdict is cached in `data/match_cache.json`.
+2. **Matching** (`src/matching`) builds candidate pairs, then has an open-weights LLM confirm them. The LLM is reached through an OpenAI-compatible API (Groq `openai/gpt-oss-120b` by default). It confirms that each pair settles on the same outcome, and which way round the outcomes line up. Every verdict is cached in `data/match_cache.json`.
+   - **Text.** A TF-IDF index compares title, subtitle and context. For Kalshi the context is `rules_primary`, which names both teams. For Polymarket it is the event title plus the first paragraph of the description.
+   - **Structure.** Candidates must pass these structural filters:
+     - Market type: a Kalshi `…GAME`/`MATCH` series pairs only with a Polymarket `moneyline`, and likewise `SPREAD`, `TOTAL`, `TEAMTOTAL`, `SCORE` and `BTTS`, including quarter and half variants.
+     - Strike: Kalshi `floor_strike`/`cap_strike` must equal Polymarket `line`, and a Polymarket line needs a Kalshi strike.
+     - Subject team: a spread or team total must be about the same team.
+     - Close times must fall within `maximumCloseTimeDifferenceDays`, and the numbers in the titles must agree.
+   - **Teams.** `config/teams.json` maps Kalshi team codes (from tickers such as `KXNHLGAME-26NOV04CGYSEA`) to the nicknames Polymarket uses ("Flames vs. Kraken") for the NBA, NHL, NFL and MLB. Markets that both name teams must share one, and Kalshi game-level markets get `sharedTeamBonus` per shared team.
+   - **Ranking.** Each Kalshi market keeps its `candidatesPerMarket` best Polymarket matches, ranked by score and then by closeness of event time. Each Polymarket market keeps its `candidatesPerPolymarketMarket` best Kalshi matches, so hourly ladders like Bitcoin don't flood the LLM.
+   - **LLM.** Cached verdicts are applied first. Unknown pairs then go to the LLM with `concurrentRequests` requests in flight, paced to `requestsPerMinute`.
 3. **Arbitrage engine** (`src/arbitrage`) holds four ask ladders per pair: Kalshi YES, Kalshi NO, Polymarket YES-equivalent and Polymarket NO-equivalent. After each update it re-evaluates the one trade direction that update affects:
    `edge = $1 - kalshiAsk - polymarketAsk - kalshiFee - polymarketFee`
 4. **Binary logging** (`src/logging`) writes fixed 64-byte records. A background thread drains them to `data/logs/*.bin`. Decode them with `kparb_logdecode`.
 
 ### Discovery cycles
 
-- Only markets that resolve within `discovery.maximumDaysUntilResolution` are considered (default 2 days). For Kalshi this is `expected_expiration_time`; for Polymarket it is `endDate`.
+- Only markets whose event falls within `discovery.maximumDaysUntilResolution` are considered (default 2 days). For Kalshi this is `expected_expiration_time`. For Polymarket it is `gameStartTime` when present, otherwise `endDate`. Polymarket's `endDate` is a resolution deadline, and game moneylines set it a week after the game. A second Gamma fetch with `sports_market_types=moneyline`, reaching `polymarketMoneylineSearchDays` ahead, picks those up.
 - Markets must also be open for trading at discovery time. On Kalshi that means `status` is `active` and `open_time` has passed. On Polymarket it means `acceptingOrders` is true and `acceptingOrdersTimestamp` (or `startDate`) has passed.
 - Matching runs on a background thread. Streaming starts as soon as either `pairsBeforeStreaming` pairs (default 500) are matched, `maximumMinutesBeforeStreaming` (default 5) have passed, or matching finishes.
 - Matching keeps running while the stream is live. The stream restarts with the larger pair set each time another `pairsBetweenStreamRestarts` pairs (default 25) are matched, and once more when matching finishes.
@@ -82,12 +91,14 @@ To force a pair in or out of the matched set, create `data/manual_matches.json`:
 
 ```sh
 ./build/release/src/app/kparb --match-only
+./build/release/src/app/kparb --candidates-only
 ./build/release/src/app/kparb --use-saved-pairs
 ./build/release/src/app/kparb
 ./build/release/src/app/kparb --use-saved-pairs --duration-seconds 600
 ```
 
 - `--match-only` discovers markets, matches them, writes `data/matched_pairs.json`, then exits.
+- `--candidates-only` discovers markets and writes candidate pairs to `data/candidates.tsv`, along with any cached verdict. It makes no LLM calls, so it is a free way to tune the matching settings.
 - `--use-saved-pairs` streams the pairs saved by the last match.
 - With no flags, it discovers, matches and streams in one run.
 - `--duration-seconds` stops streaming after the given number of seconds.
