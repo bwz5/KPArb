@@ -6,6 +6,7 @@
 #include "common/Clock.h"
 #include "common/EnvironmentFile.h"
 #include "common/TimeParsing.h"
+#include "ingestion/EntityDirectory.h"
 #include "ingestion/HttpClient.h"
 #include "ingestion/KalshiBookFeed.h"
 #include "ingestion/KalshiMarketCatalog.h"
@@ -14,7 +15,6 @@
 #include "ingestion/MarketFilter.h"
 #include "ingestion/PolymarketBookFeed.h"
 #include "ingestion/PolymarketMarketCatalog.h"
-#include "ingestion/EntityDirectory.h"
 #include "logging/BinaryLogger.h"
 #include "logging/RecordFormatting.h"
 #include "logging/RecordTypes.h"
@@ -30,6 +30,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <thread>
 #include <unordered_set>
@@ -231,9 +232,12 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
             ? std::min(overallDeadline, Clock::now() + std::chrono::minutes(config.rematchIntervalMinutes))
             : overallDeadline;
 
-        DiscoveredMarkets markets = discoverMarkets(channels.application);
+        std::optional<DiscoveredMarkets> markets = discoverMarketsUntilAvailable(channels.application, overallDeadline, shutdownRequested);
+        if (!markets) {
+            break;
+        }
         BackgroundMatcher matcher(config, channels.matcher);
-        matcher.start(std::move(markets.kalshi), std::move(markets.polymarket));
+        matcher.start(std::move(markets->kalshi), std::move(markets->polymarket));
 
         if (isMatchOnly) {
             matcher.waitUntilFinished();
@@ -310,6 +314,23 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
         }
     }
     return 0;
+}
+
+std::optional<DiscoveredMarkets> Application::discoverMarketsUntilAvailable(LogChannel& applicationChannel,
+    Clock::time_point overallDeadline, const std::atomic<bool>& shutdownRequested)
+{
+    constexpr int discoveryRetrySeconds = 60;
+    while (!shutdownRequested.load(std::memory_order_acquire) && Clock::now() < overallDeadline) {
+        try {
+            return discoverMarkets(applicationChannel);
+        } catch (const std::exception& error) {
+            std::cout << "discovery failed: " << error.what() << "\nretrying discovery in " << discoveryRetrySeconds << "s\n";
+        }
+        for (int second = 0; second < discoveryRetrySeconds && !shutdownRequested.load(std::memory_order_acquire); ++second) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    }
+    return std::nullopt;
 }
 
 DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel)

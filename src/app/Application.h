@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <vector>
 
 namespace kparb {
@@ -60,6 +61,8 @@ private:
     int runDiscoveryCycles(LogChannels& channels, Clock::time_point overallDeadline, const std::atomic<bool>& shutdownRequested);
     int runSavedPairs(LogChannels& channels, Clock::time_point overallDeadline, const std::atomic<bool>& shutdownRequested);
     int runCandidatesOnly(LogChannels& channels);
+    std::optional<DiscoveredMarkets> discoverMarketsUntilAvailable(LogChannel& applicationChannel, Clock::time_point overallDeadline,
+        const std::atomic<bool>& shutdownRequested);
     DiscoveredMarkets discoverMarkets(LogChannel& applicationChannel);
     StreamOutcome streamAndDetect(const std::vector<MatchedPair>& pairs, LogChannels& channels,
         const std::function<bool()>& shouldEndSession, const std::atomic<bool>& shutdownRequested);
