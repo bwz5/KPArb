@@ -38,7 +38,8 @@
     "kalshiCloseTimeSearchDays": 21,
     "rematchIntervalMinutes": 60,
     "pairsBeforeStreaming": 500,
-    "pairsBetweenStreamRestarts": 250
+    "maximumMinutesBeforeStreaming": 5,
+    "pairsBetweenStreamRestarts": 25
   },
   "matching": {
     "candidatesPerMarket": 2,

@@ -200,9 +200,11 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
         }
 
         const std::size_t streamingThreshold = config.pairsBeforeStreaming;
+        const auto streamingStartDeadline = std::min(cycleDeadline, Clock::now() + std::chrono::minutes(config.maximumMinutesBeforeStreaming));
         waitUntil(
             [&] {
-                return matcher.acceptedPairCount() >= streamingThreshold || matcher.isFinished() || Clock::now() >= cycleDeadline;
+                return matcher.acceptedPairCount() >= streamingThreshold || matcher.isFinished()
+                    || Clock::now() >= streamingStartDeadline;
             },
             shutdownRequested);
 

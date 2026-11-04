@@ -17,7 +17,8 @@ TEST(ApplicationConfigTest, ExampleConfigParses)
     EXPECT_DOUBLE_EQ(config.maximumDaysUntilResolution, 2.0);
     EXPECT_EQ(config.rematchIntervalMinutes, 60);
     EXPECT_EQ(config.pairsBeforeStreaming, 500U);
-    EXPECT_EQ(config.pairsBetweenStreamRestarts, 250U);
+    EXPECT_EQ(config.maximumMinutesBeforeStreaming, 5);
+    EXPECT_EQ(config.pairsBetweenStreamRestarts, 25U);
     EXPECT_EQ(config.engine.minimumEdgeTicks, 5);
     EXPECT_EQ(config.engine.statsIntervalNanos, 10'000'000'000);
     EXPECT_DOUBLE_EQ(config.kalshiTakerFeeRate, 0.07);

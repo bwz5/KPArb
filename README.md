@@ -13,8 +13,8 @@ Detects arbitrage between equivalent Kalshi and Polymarket binary markets. It on
 ### Discovery cycles
 
 - Only markets that resolve within `discovery.maximumDaysUntilResolution` are considered (default 2 days). For Kalshi this is `expected_expiration_time`; for Polymarket it is `endDate`.
-- Matching runs on a background thread. Streaming starts once `pairsBeforeStreaming` pairs (default 500) are matched, or once matching finishes, whichever comes first.
-- Matching keeps running while the stream is live. The stream restarts with the larger pair set each time another `pairsBetweenStreamRestarts` pairs (default 250) are matched, and once more when matching finishes.
+- Matching runs on a background thread. Streaming starts as soon as either `pairsBeforeStreaming` pairs (default 500) are matched, `maximumMinutesBeforeStreaming` (default 5) have passed, or matching finishes.
+- Matching keeps running while the stream is live. The stream restarts with the larger pair set each time another `pairsBetweenStreamRestarts` pairs (default 25) are matched, and once more when matching finishes.
 - Discovery and matching rerun every `rematchIntervalMinutes` (default 60) so new short-dated markets get picked up. Cached verdicts make later cycles cheap.
 - After `maximumConsecutiveFailures` LLM errors in a row, for example an exhausted rate-limit quota, the LLM is skipped until the next cycle.
 

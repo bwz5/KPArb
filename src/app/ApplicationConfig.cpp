@@ -105,6 +105,7 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readInto(discovery, "kalshiCloseTimeSearchDays", config.kalshiCloseTimeSearchDays);
     readInto(discovery, "rematchIntervalMinutes", config.rematchIntervalMinutes);
     readInto(discovery, "pairsBeforeStreaming", config.pairsBeforeStreaming);
+    readInto(discovery, "maximumMinutesBeforeStreaming", config.maximumMinutesBeforeStreaming);
     readInto(discovery, "pairsBetweenStreamRestarts", config.pairsBetweenStreamRestarts);
 
     const auto logging = sectionOf(document, "logging");

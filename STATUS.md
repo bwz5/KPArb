@@ -16,7 +16,7 @@
 ## Things to know
 
 - With the 2-day window and Groq's free tier, the daily token limit is the bottleneck, not requests per minute. Verdicts are cached, so each cycle continues where the last one stopped. Check your limits at console.groq.com.
-- Streaming starts once 500 pairs are matched (`discovery.pairsBeforeStreaming`). After that it restarts the stream each time another 250 pairs are matched, and once when matching finishes. Discovery and matching rerun every 60 minutes, so new short-dated markets get picked up.
+- Streaming starts once 500 pairs are matched or 5 minutes have passed, whichever comes first. After that the stream restarts each time another 25 pairs are matched, and once when matching finishes. The time cap exists because only about 5% of candidates are confirmed: the first live run accepted 8 of 170, and at roughly 10 checks a minute on the free tier, 500 pairs is out of reach in a single day. Discovery and matching rerun every 60 minutes, so new short-dated markets get picked up.
 - Kalshi fees are approximated per contract as `ceil(0.07 × p × (1 − p))` in $0.001 ticks. Kalshi actually rounds the fee up to the cent on the whole order, so on large orders this slightly overstates fees.
 - Sizing walks both order books until the marginal edge drops below `minimumEdgeTicks`. There are no balance, position or notional caps, and Polymarket's `orderMinSize` is not enforced yet.
 - Polymarket subscriptions are sent in chunks of 500 tokens on one connection. If Polymarket limits assets per connection, the feed would need to be sharded across connections.

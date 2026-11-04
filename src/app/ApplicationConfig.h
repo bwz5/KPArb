@@ -34,7 +34,8 @@ struct ApplicationConfig {
     std::int64_t kalshiCloseTimeSearchDays = 21;
     std::int64_t rematchIntervalMinutes = 60;
     std::size_t pairsBeforeStreaming = 500;
-    std::size_t pairsBetweenStreamRestarts = 250;
+    std::int64_t maximumMinutesBeforeStreaming = 5;
+    std::size_t pairsBetweenStreamRestarts = 25;
 
     EngineSettings engine;
     double kalshiTakerFeeRate = 0.07;
