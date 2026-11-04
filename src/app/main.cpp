@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -30,6 +31,7 @@ void printUsage()
 int main(int argumentCount, char** arguments)
 {
     static_assert(std::atomic<bool>::is_always_lock_free);
+    std::setvbuf(stdout, nullptr, _IOLBF, 0);
     kparb::RunOptions options;
     for (int index = 1; index < argumentCount; ++index) {
         const std::string argument = arguments[index];
