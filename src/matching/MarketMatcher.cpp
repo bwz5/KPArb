@@ -191,9 +191,14 @@ void MarketMatcher::acceptIfMatched(MatchRun& run, const CandidatePair& candidat
 {
     const MarketInfo& kalshiMarket = run.kalshiMarkets[candidate.kalshiIndex];
     const MarketInfo& polymarketMarket = run.polymarketMarkets[candidate.polymarketIndex];
-    if (verdict.isSameEvent && verdict.confidence >= settings.minimumConfidence
+    const EntityPolarity polarity = entityPolarity(kalshiMarket, polymarketMarket);
+    const bool isInverted = polarity == EntityPolarity::Unknown ? verdict.isInverted : polarity == EntityPolarity::Inverted;
+    if (verdict.isSameEvent && verdict.confidence >= settings.minimumConfidence && polarity != EntityPolarity::Conflicting
         && run.accepted.emplace(kalshiMarket.identifier, polymarketMarket.identifier).second) {
-        run.pairs.push_back(makePair(kalshiMarket, polymarketMarket, verdict.isInverted, verdict.confidence));
+        run.pairs.push_back(makePair(kalshiMarket, polymarketMarket, isInverted, verdict.confidence));
+        if (isInverted != verdict.isInverted) {
+            ++progress.polarityCorrections;
+        }
         ++progress.pairsAccepted;
         if (run.onPairAccepted) {
             run.onPairAccepted(run.pairs.back());

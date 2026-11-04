@@ -75,6 +75,24 @@ bool areEntitiesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& pol
     return !bothNameEntities && !(bothInEntityScope && eitherNamesEntities);
 }
 
+EntityPolarity entityPolarity(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept
+{
+    const std::string& subject = kalshiMarket.subjectTeamKey;
+    if (subject.empty() || (polymarketMarket.yesOutcomeEntityKey.empty() && polymarketMarket.noOutcomeEntityKey.empty())) {
+        return EntityPolarity::Unknown;
+    }
+    if (polymarketMarket.yesOutcomeEntityKey == subject && polymarketMarket.noOutcomeEntityKey != subject) {
+        return EntityPolarity::Aligned;
+    }
+    if (polymarketMarket.noOutcomeEntityKey == subject && polymarketMarket.yesOutcomeEntityKey != subject) {
+        return EntityPolarity::Inverted;
+    }
+    if (!polymarketMarket.yesOutcomeEntityKey.empty() && !polymarketMarket.noOutcomeEntityKey.empty()) {
+        return EntityPolarity::Conflicting;
+    }
+    return EntityPolarity::Unknown;
+}
+
 bool areSubjectTeamsCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept
 {
     return kalshiMarket.subjectTeamKey.empty() || polymarketMarket.subjectTeamKey.empty()

@@ -69,6 +69,9 @@ TEST(EntityDirectoryTest, BothVenuesEndUpWithTheSameEntityNames)
     EXPECT_EQ(kalshi.teamKeys, (std::vector<std::string>{"nhl:CGY", "nhl:SEA"}));
     EXPECT_EQ(polymarket.teamKeys, kalshi.teamKeys);
     EXPECT_EQ(kalshi.entityLeague, "nhl");
+    EXPECT_EQ(polymarket.yesOutcomeEntityKey, "nhl:CGY");
+    EXPECT_EQ(polymarket.noOutcomeEntityKey, "nhl:SEA");
+    EXPECT_EQ(kalshi.yesOutcomeEntityKey, "nhl:CGY");
 }
 
 TEST(EntityDirectoryTest, LongestAliasWinsAndCanonicalNamesAreNotRewrittenTwice)

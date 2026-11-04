@@ -314,6 +314,10 @@ void EntityDirectory::annotate(MarketInfo& market) const
         if (subjectMentions.empty() && (field == &market.subtitle || field == &market.title)) {
             subjectMentions = canonical.mentionedEntities;
         }
+        if (canonical.mentionedEntities.size() == 1 && (field == &market.yesOutcomeName || field == &market.noOutcomeName)) {
+            (field == &market.yesOutcomeName ? market.yesOutcomeEntityKey : market.noOutcomeEntityKey)
+                = keyFor(*league, canonical.mentionedEntities.front());
+        }
         mentioned.insert(mentioned.end(), canonical.mentionedEntities.begin(), canonical.mentionedEntities.end());
         *field = std::move(canonical.text);
     }

@@ -38,6 +38,10 @@ bool areStrikesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& poly
 
 bool areEntitiesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket, std::size_t sharedEntities) noexcept;
 
+enum class EntityPolarity { Unknown, Aligned, Inverted, Conflicting };
+
+EntityPolarity entityPolarity(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept;
+
 bool areSubjectTeamsCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept;
 
 std::size_t sharedTeamCount(const MarketInfo& first, const MarketInfo& second);

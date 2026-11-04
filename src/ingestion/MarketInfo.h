@@ -33,6 +33,8 @@ struct MarketInfo {
     std::string entityLeague;
     std::vector<std::string> teamKeys;
     std::string subjectTeamKey;
+    std::string yesOutcomeEntityKey;
+    std::string noOutcomeEntityKey;
 };
 
 }

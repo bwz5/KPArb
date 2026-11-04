@@ -110,6 +110,32 @@ TEST_F(MarketMatcherTest, AcceptsConfirmedPairsAndRecordsPolarity)
     EXPECT_EQ(findPair("K-SB"), pairs.end());
 }
 
+TEST_F(MarketMatcherTest, OutcomeEntitiesDecidePolarityOverTheLanguageModel)
+{
+    store->load();
+    std::vector<MarketInfo> kalshiGames{
+        market(Venue::Kalshi, "K-DUKE", "Fed Duke Blue Devils wins"),
+        market(Venue::Kalshi, "K-FED", "Fed Coastal Carolina Chanticleers wins"),
+    };
+    kalshiGames[0].subjectTeamKey = "cbb:DUKE";
+    kalshiGames[1].subjectTeamKey = "cbb:TCU";
+    std::vector<MarketInfo> polymarketGames{market(Venue::Polymarket, "P-GAME", "Fed Coastal Carolina Chanticleers vs. Duke Blue Devils")};
+    polymarketGames[0].yesOutcomeEntityKey = "cbb:CCAR";
+    polymarketGames[0].noOutcomeEntityKey = "cbb:DUKE";
+    settings.candidates.minimumSimilarity = 0.0;
+    MarketMatcher matcher(settings, model, *store, *channel);
+    const auto pairs = matcher.match(kalshiGames, polymarketGames);
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_EQ(pairs[0].kalshiTicker, "K-DUKE");
+    EXPECT_TRUE(pairs[0].isInverted);
+    EXPECT_EQ(matcher.lastProgress().polarityCorrections, 1U);
+    EXPECT_EQ(entityPolarity(kalshiGames[1], polymarketGames[0]), EntityPolarity::Conflicting);
+    MarketInfo yesNoMarket = market(Venue::Polymarket, "P-YES", "Will Duke win?");
+    EXPECT_EQ(entityPolarity(kalshiGames[0], yesNoMarket), EntityPolarity::Unknown);
+    yesNoMarket.yesOutcomeEntityKey = "cbb:DUKE";
+    EXPECT_EQ(entityPolarity(kalshiGames[0], yesNoMarket), EntityPolarity::Aligned);
+}
+
 TEST_F(MarketMatcherTest, CachedVerdictsSkipTheLanguageModel)
 {
     store->load();
