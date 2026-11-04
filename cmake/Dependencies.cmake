@@ -12,6 +12,7 @@ endif()
 
 find_package(OpenSSL 3 REQUIRED)
 find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
 
 FetchContent_Declare(
     googletest

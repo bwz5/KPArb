@@ -1,4 +1,6 @@
 add_library(kparb_ingestion STATIC
+    EntityDirectory.cpp
+    GzipDecoding.cpp
     HttpClient.cpp
     JsonDocumentBuffer.cpp
     KalshiBookFeed.cpp
@@ -11,12 +13,11 @@ add_library(kparb_ingestion STATIC
     PolymarketBookFeed.cpp
     PolymarketMarketCatalog.cpp
     PolymarketMessageParser.cpp
-    EntityDirectory.cpp
     UpdatePublisher.cpp
     UrlEncoding.cpp
     WebSocketBookFeed.cpp
 )
 target_link_libraries(kparb_ingestion
     PUBLIC kparb_common kparb_logging kparb_arbitrage simdjson::simdjson
-    PRIVATE nlohmann_json::nlohmann_json ixwebsocket::ixwebsocket OpenSSL::Crypto
+    PRIVATE nlohmann_json::nlohmann_json ixwebsocket::ixwebsocket OpenSSL::Crypto ZLIB::ZLIB
 )

@@ -1,10 +1,12 @@
 #include "ingestion/HttpClient.h"
 
+#include "ingestion/GzipDecoding.h"
 #include "ingestion/UrlEncoding.h"
 
 #include <ixwebsocket/IXHttpClient.h>
 
 #include <cstdlib>
+#include <utility>
 
 namespace kparb {
 
@@ -19,6 +21,11 @@ HttpResponse convertResponse(const ix::HttpResponsePtr& response)
     }
     converted.statusCode = response->statusCode;
     converted.body = response->body;
+    if (isGzipCompressed(converted.body)) {
+        if (auto decompressed = decompressGzip(converted.body)) {
+            converted.body = std::move(*decompressed);
+        }
+    }
     converted.errorMessage = response->errorMsg;
     const auto retryAfter = response->headers.find("Retry-After");
     if (retryAfter != response->headers.end()) {
@@ -34,7 +41,7 @@ ix::HttpRequestArgsPtr createArguments(ix::HttpClient& client, const std::string
     arguments->connectTimeout = 15;
     arguments->transferTimeout = 120;
     arguments->followRedirects = true;
-    arguments->compress = true;
+    arguments->compress = false;
     arguments->extraHeaders["User-Agent"] = "kparb/0.1";
     arguments->extraHeaders["Accept"] = "application/json";
     for (const auto& [name, value] : headers) {
