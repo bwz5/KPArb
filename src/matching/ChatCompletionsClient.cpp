@@ -13,6 +13,13 @@ ChatCompletionsClient::ChatCompletionsClient(ChatCompletionsSettings clientSetti
     while (!settings.baseUrl.empty() && settings.baseUrl.back() == '/') {
         settings.baseUrl.pop_back();
     }
+    models.push_back(settings.model);
+    for (const std::string& fallback : settings.fallbackModels) {
+        if (!fallback.empty() && std::find(models.begin(), models.end(), fallback) == models.end()) {
+            models.push_back(fallback);
+        }
+    }
+    modelAvailableAt.assign(models.size(), std::chrono::steady_clock::now());
 }
 
 std::string ChatCompletionsClient::modelName() const
@@ -22,8 +29,14 @@ std::string ChatCompletionsClient::modelName() const
 
 std::string ChatCompletionsClient::buildRequestBody(const ChatCompletionsSettings& settings, const std::vector<ChatMessage>& messages)
 {
+    return buildRequestBody(settings, settings.model, messages);
+}
+
+std::string ChatCompletionsClient::buildRequestBody(const ChatCompletionsSettings& settings, const std::string& model,
+    const std::vector<ChatMessage>& messages)
+{
     nlohmann::json body{
-        {"model", settings.model},
+        {"model", model},
         {"temperature", 0},
         {"max_tokens", settings.maximumOutputTokens},
         {"messages", nlohmann::json::array()},
@@ -77,10 +90,32 @@ void ChatCompletionsClient::waitForRateLimit()
     std::this_thread::sleep_until(slot);
 }
 
+std::size_t ChatCompletionsClient::availableModel(std::int64_t& secondsUntilAvailable)
+{
+    const std::lock_guard<std::mutex> lock(rateLimitMutex);
+    const auto now = std::chrono::steady_clock::now();
+    auto soonest = std::chrono::steady_clock::time_point::max();
+    for (std::size_t modelIndex = 0; modelIndex < models.size(); ++modelIndex) {
+        if (modelAvailableAt[modelIndex] <= now) {
+            secondsUntilAvailable = 0;
+            return modelIndex;
+        }
+        soonest = std::min(soonest, modelAvailableAt[modelIndex]);
+    }
+    secondsUntilAvailable = std::max<std::int64_t>(1, std::chrono::ceil<std::chrono::seconds>(soonest - now).count());
+    return models.size();
+}
+
+void ChatCompletionsClient::pauseModel(std::size_t modelIndex, std::int64_t seconds)
+{
+    const std::lock_guard<std::mutex> lock(rateLimitMutex);
+    modelAvailableAt[modelIndex] = std::max(modelAvailableAt[modelIndex], std::chrono::steady_clock::now() + std::chrono::seconds(seconds));
+}
+
 LanguageModelResponse ChatCompletionsClient::complete(const std::vector<ChatMessage>& messages)
 {
+    constexpr std::int64_t unavailableModelPauseSeconds = 3600;
     const std::string url = settings.baseUrl + "/chat/completions";
-    const std::string requestBody = buildRequestBody(settings, messages);
     HttpHeaders headers{{"Content-Type", "application/json"}};
     if (!settings.apiKey.empty()) {
         headers.emplace_back("Authorization", "Bearer " + settings.apiKey);
@@ -89,20 +124,41 @@ LanguageModelResponse ChatCompletionsClient::complete(const std::vector<ChatMess
     HttpClient httpClient;
     LanguageModelResponse lastFailure;
     for (int attempt = 0; attempt < settings.maximumAttempts; ++attempt) {
-        waitForRateLimit();
-        const HttpResponse response = httpClient.post(url, requestBody, headers);
-        if (response.isSuccess()) {
-            return parseResponseBody(response.body);
+        std::int64_t secondsUntilAvailable = 0;
+        const std::size_t modelIndex = availableModel(secondsUntilAvailable);
+        if (modelIndex == models.size()) {
+            lastFailure.errorMessage = "every model is waiting for quota; " + lastFailure.errorMessage;
+            lastFailure.retryAfterSeconds = secondsUntilAvailable;
+            return lastFailure;
         }
-        lastFailure.errorMessage = "HTTP " + std::to_string(response.statusCode) + " " + response.errorMessage + " "
+        waitForRateLimit();
+        const HttpResponse response = httpClient.post(url, buildRequestBody(settings, models[modelIndex], messages), headers);
+        if (response.isSuccess()) {
+            LanguageModelResponse parsed = parseResponseBody(response.body);
+            parsed.model = models[modelIndex];
+            return parsed;
+        }
+        lastFailure.errorMessage = models[modelIndex] + ": HTTP " + std::to_string(response.statusCode) + " " + response.errorMessage + " "
             + response.body.substr(0, 300);
         lastFailure.retryAfterSeconds = response.retryAfterSeconds;
+        if (response.statusCode == 404 && models.size() > 1) {
+            pauseModel(modelIndex, unavailableModelPauseSeconds);
+            continue;
+        }
         const bool isRetryable = response.statusCode == 0 || response.statusCode == 429 || response.statusCode >= 500;
-        if (!isRetryable || response.retryAfterSeconds > settings.maximumRetryAfterSeconds) {
+        if (!isRetryable) {
             break;
+        }
+        if (response.retryAfterSeconds > settings.maximumRetryAfterSeconds) {
+            pauseModel(modelIndex, response.retryAfterSeconds);
+            continue;
         }
         const std::int64_t backoffSeconds = response.retryAfterSeconds > 0 ? response.retryAfterSeconds
                                                                            : std::min<std::int64_t>(60, 2LL << attempt);
+        if (models.size() > 1) {
+            pauseModel(modelIndex, backoffSeconds);
+            continue;
+        }
         std::this_thread::sleep_for(std::chrono::seconds(backoffSeconds));
     }
     return lastFailure;

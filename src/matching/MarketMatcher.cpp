@@ -247,7 +247,7 @@ void MarketMatcher::askLanguageModel(MatchRun& run, const CandidatePair& candida
         logEvent(MatchEventCode::LanguageModelFailure, kalshiIndex, polymarketIndex, -1);
         return;
     }
-    verdict->model = model.modelName();
+    verdict->model = response.model.empty() ? model.modelName() : response.model;
     verdict->decidedAtSeconds = wallClockSeconds();
     store.recordVerdict(kalshiMarket.identifier, polymarketMarket.identifier, *verdict);
     logEvent(MatchEventCode::VerdictFromLanguageModel, kalshiIndex, polymarketIndex, verdict->isSameEvent ? 1 : 0);

@@ -36,6 +36,8 @@ std::string candidateTextFor(const MarketInfo& market);
 
 bool areStrikesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept;
 
+bool areEntitiesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket, std::size_t sharedEntities) noexcept;
+
 bool areSubjectTeamsCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept;
 
 std::size_t sharedTeamCount(const MarketInfo& first, const MarketInfo& second);

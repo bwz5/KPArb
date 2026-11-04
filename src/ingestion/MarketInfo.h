@@ -30,6 +30,7 @@ struct MarketInfo {
     double takerFeeExponent = 1.0;
     double strike = 0.0;
     bool hasStrike = false;
+    std::string entityLeague;
     std::vector<std::string> teamKeys;
     std::string subjectTeamKey;
 };

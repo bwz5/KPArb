@@ -183,6 +183,29 @@ TEST(CandidateFilterTest, SharedTeamsBridgeCityAndNicknameAndRejectOtherGames)
     EXPECT_GE(candidates[0].score, 2 * settings.sharedTeamBonus);
 }
 
+TEST(CandidateFilterTest, MarketsInEntityScopeMustNameTheSameEntity)
+{
+    MarketInfo kalshiWomen = sportsMarket(Venue::Kalshi, "k-women", "Napoli wins", "winner");
+    kalshiWomen.entityLeague = "kxserieaw";
+    MarketInfo polymarketMen = sportsMarket(Venue::Polymarket, "p-men", "SSC Napoli vs. FC Internazionale Milano", "winner");
+    polymarketMen.entityLeague = "sea";
+    polymarketMen.teamKeys = {"sea:INT", "sea:NAP"};
+    MarketInfo kalshiProp = sportsMarket(Venue::Kalshi, "k-prop", "LeBron James: 25+ points", "");
+    kalshiProp.entityLeague = "nba";
+    MarketInfo polymarketProp = sportsMarket(Venue::Polymarket, "p-prop", "LeBron James: Points O/U 24.5", "");
+    polymarketProp.entityLeague = "nba";
+    MarketInfo polymarketTennis = sportsMarket(Venue::Polymarket, "p-tennis", "Sinner vs. Alcaraz", "winner");
+    MarketInfo kalshiMen = kalshiWomen;
+    kalshiMen.entityLeague = "sea";
+    kalshiMen.teamKeys = {"sea:INT", "sea:NAP"};
+    EXPECT_FALSE(areEntitiesCompatible(kalshiWomen, polymarketMen, 0));
+    EXPECT_TRUE(areEntitiesCompatible(kalshiMen, polymarketMen, 2));
+    EXPECT_TRUE(areEntitiesCompatible(kalshiProp, polymarketProp, 0));
+    EXPECT_TRUE(areEntitiesCompatible(kalshiMen, polymarketTennis, 0));
+    polymarketTennis.teamKeys = {"atp:SIN"};
+    EXPECT_FALSE(areEntitiesCompatible(kalshiMen, polymarketTennis, 0));
+}
+
 TEST(CandidateFilterTest, PolymarketLinesNeedAKalshiStrike)
 {
     MarketInfo kalshiLeader = market(Venue::Kalshi, "k-leader", "Austin Reaves: Points leader", 1'000'000);

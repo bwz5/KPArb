@@ -11,7 +11,7 @@ add_library(kparb_ingestion STATIC
     PolymarketBookFeed.cpp
     PolymarketMarketCatalog.cpp
     PolymarketMessageParser.cpp
-    TeamDirectory.cpp
+    EntityDirectory.cpp
     UpdatePublisher.cpp
     UrlEncoding.cpp
     WebSocketBookFeed.cpp

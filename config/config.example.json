@@ -26,6 +26,7 @@
   "languageModel": {
     "baseUrl": "https://api.groq.com/openai/v1",
     "model": "openai/gpt-oss-120b",
+    "fallbackModels": ["openai/gpt-oss-20b", "qwen/qwen3.8-27b"],
     "requestsPerMinute": 250,
     "maximumAttempts": 6,
     "maximumOutputTokens": 400,
@@ -59,7 +60,7 @@
     "cachePath": "data/match_cache.json",
     "manualMatchesPath": "data/manual_matches.json",
     "matchedPairsPath": "data/matched_pairs.json",
-    "teamsPath": "config/teams.json",
+    "entitiesPath": "config/entities.json",
     "sharedTeamBonus": 0.25
   },
   "arbitrage": {

@@ -16,6 +16,7 @@ struct LanguageModelResponse {
     std::string content;
     std::string errorMessage;
     std::int64_t retryAfterSeconds = 0;
+    std::string model;
 };
 
 class LanguageModelClient {

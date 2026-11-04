@@ -64,6 +64,17 @@ bool areStrikesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& poly
     return kalshiMarket.hasStrike && std::fabs(kalshiMarket.strike - polymarketMarket.strike) < 1e-6;
 }
 
+bool areEntitiesCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket, std::size_t sharedEntities) noexcept
+{
+    if (sharedEntities > 0) {
+        return true;
+    }
+    const bool bothNameEntities = !kalshiMarket.teamKeys.empty() && !polymarketMarket.teamKeys.empty();
+    const bool bothInEntityScope = !kalshiMarket.entityLeague.empty() && !polymarketMarket.entityLeague.empty();
+    const bool eitherNamesEntities = !kalshiMarket.teamKeys.empty() || !polymarketMarket.teamKeys.empty();
+    return !bothNameEntities && !(bothInEntityScope && eitherNamesEntities);
+}
+
 bool areSubjectTeamsCompatible(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept
 {
     return kalshiMarket.subjectTeamKey.empty() || polymarketMarket.subjectTeamKey.empty()
@@ -195,11 +206,10 @@ std::vector<CandidatePair> CandidateFinder::findCandidates(const std::vector<Mar
         for (const std::uint32_t documentIndex : touched) {
             const MarketInfo& polymarketMarket = polymarket[documentIndex];
             const std::size_t sharedTeams = sharedTeamCount(kalshiMarket, polymarketMarket);
-            const bool bothNameTeams = !kalshiMarket.teamKeys.empty() && !polymarketMarket.teamKeys.empty();
             const double teamBonus = kalshiMarket.marketType.empty() ? 0.0 : settings.sharedTeamBonus * static_cast<double>(sharedTeams);
             const double score = scores[documentIndex] + teamBonus;
             scores[documentIndex] = 0.0;
-            if (score < settings.minimumSimilarity || (bothNameTeams && sharedTeams == 0)) {
+            if (score < settings.minimumSimilarity || !areEntitiesCompatible(kalshiMarket, polymarketMarket, sharedTeams)) {
                 continue;
             }
             const bool hasBothTimes = kalshiMarket.closeTimeSeconds > 0 && polymarketMarket.closeTimeSeconds > 0;

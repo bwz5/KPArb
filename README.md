@@ -12,7 +12,7 @@ Detects arbitrage between equivalent Kalshi and Polymarket binary markets.
      - Strike: Kalshi `floor_strike`/`cap_strike` must equal Polymarket `line`, and a Polymarket line needs a Kalshi strike.
      - Subject team: a spread or team total must be about the same team.
      - Close times must fall within `maximumCloseTimeDifferenceDays`, and the numbers in the titles must agree.
-   - **Teams.** `config/teams.json` maps Kalshi team codes (from tickers such as `KXNHLGAME-26NOV04CGYSEA`) to the nicknames Polymarket uses ("Flames vs. Kraken") for the NBA, NHL, NFL and MLB. Markets that both name teams must share one, and Kalshi game-level markets get `sharedTeamBonus` per shared team.
+   - **Entities.** `config/entities.json` lists about 2,350 teams in 95 leagues. Each one has a Kalshi code (from tickers such as `KXNHLGAME-26NOV04CGYSEA`), Kalshi's name ("Calgary"), Polymarket's abbreviation and name from the Gamma `/teams` list ("cal", "Flames"), and one standard name ("Calgary Flames"). Before matching, every alias in a market's title, subtitle, event title, rules and outcomes is replaced with the standard name, so both venues name the same entity the same way. Leagues are scoped by the longest Kalshi series prefix or Polymarket slug prefix. When both markets fall inside a league and either one names an entity, they must share an entity. Kalshi game-level markets also get `sharedTeamBonus` per shared entity. `python3 scripts/build_entities.py` rebuilds the file. The NBA, NHL, NFL and MLB are checked code by code against Polymarket's list. Other leagues are linked by pairing Kalshi and Polymarket games on the same date. Re-running it adds new teams and keeps the checked ones.
    - **Ranking.** Each Kalshi market keeps its `candidatesPerMarket` best Polymarket matches, ranked by score and then by closeness of event time. Each Polymarket market keeps its `candidatesPerPolymarketMarket` best Kalshi matches, so hourly ladders like Bitcoin don't flood the LLM.
    - **LLM.** Cached verdicts are applied first. Unknown pairs then go to the LLM with `concurrentRequests` requests in flight, paced to `requestsPerMinute`.
 3. **Arbitrage engine** (`src/arbitrage`) holds four ask ladders per pair: Kalshi YES, Kalshi NO, Polymarket YES-equivalent and Polymarket NO-equivalent. After each update it re-evaluates the one trade direction that update affects:
@@ -98,6 +98,7 @@ To force a pair in or out of the matched set, create `data/manual_matches.json`:
 ```
 
 - `--match-only` discovers markets, matches them, writes `data/matched_pairs.json`, then exits.
+- `python3 scripts/snapshot_edges.py` reads `data/matched_pairs.json`, pulls the current order books from both venues and prints the all-in cost of the cheaper hedge for each pair after taker fees.
 - `--candidates-only` discovers markets and writes candidate pairs to `data/candidates.tsv`, along with any cached verdict. It makes no LLM calls, so it is a free way to tune the matching settings.
 - `--use-saved-pairs` streams the pairs saved by the last match.
 - With no flags, it discovers, matches and streams in one run.

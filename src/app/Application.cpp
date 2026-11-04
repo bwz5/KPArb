@@ -14,7 +14,7 @@
 #include "ingestion/MarketFilter.h"
 #include "ingestion/PolymarketBookFeed.h"
 #include "ingestion/PolymarketMarketCatalog.h"
-#include "ingestion/TeamDirectory.h"
+#include "ingestion/EntityDirectory.h"
 #include "logging/BinaryLogger.h"
 #include "logging/RecordFormatting.h"
 #include "logging/RecordTypes.h"
@@ -362,9 +362,10 @@ DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel)
             polymarketFetched.push_back(std::move(market));
         }
     }
-    const TeamDirectory teams = TeamDirectory::load(config.teamsPath);
-    teams.annotate(markets.kalshi);
-    teams.annotate(polymarketFetched);
+    const EntityDirectory entities = EntityDirectory::load(config.entitiesPath);
+    entities.annotate(markets.kalshi);
+    entities.annotate(polymarketFetched);
+    std::cout << "entities: " << entities.entityCount() << " across " << entities.leagueCount() << " leagues\n";
     const std::size_t polymarketFetchedCount = polymarketFetched.size();
     markets.polymarket = keepOpenMarketsResolvingWithin(std::move(polymarketFetched), window);
     writeMatchEvent(applicationChannel, MatchEventCode::PolymarketCatalogLoaded, static_cast<std::int64_t>(markets.polymarket.size()),

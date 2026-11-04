@@ -29,7 +29,7 @@ struct ApplicationConfig {
     std::filesystem::path matchCachePath = "data/match_cache.json";
     std::filesystem::path manualMatchesPath = "data/manual_matches.json";
     std::filesystem::path matchedPairsPath = "data/matched_pairs.json";
-    std::filesystem::path teamsPath = "config/teams.json";
+    std::filesystem::path entitiesPath = "config/entities.json";
 
     double maximumDaysUntilResolution = 2.0;
     std::int64_t kalshiCloseTimeSearchDays = 21;

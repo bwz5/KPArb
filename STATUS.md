@@ -6,12 +6,14 @@
 - Polymarket Gamma discovery. Uses `/markets/keyset` with `after_cursor` and an `end_date_min`/`end_date_max` window. Per-market taker fees come from `feeSchedule`.
 - Polymarket market WebSocket. It connects, subscribes, receives book snapshots and price changes, and sends text pings.
 - Candidate generation. The 2-day window produced 5,524 candidate pairs on 2026-11-03 with title-only TF-IDF. On 2026-11-04, structural filters (market type, strike, team codes, subject team) replaced it.
+- 2026-11-04: team names are now standardized through `config/entities.json` (2,350 entities in 95 leagues) before matching. The live candidate set grew from 4,882 to 10,833 pairs. At that point the 17 matched pairs showed no top-of-book arbitrage after fees; the cheapest hedge cost $1.019.
 - The overnight run on 2026-11-03/04 confirmed only 11 pairs, for two reasons. First, the free Groq tier allowed about 10 checks an hour. Second, about 93% of LLM checks were structurally hopeless: game winners against spreads, NHL overtime against college football, Bitcoin midnight against noon. Polymarket moneylines were missing entirely, because their `endDate` falls a week after the game. The live candidate set changed from about 7,500 mostly-wrong pairs to about 4,900 pairs. Most of these are line-for-line spreads and totals, plus game winners matched to moneylines.
 
 ## Credentials
 
 - The Kalshi production key works. It is an Ed25519 key, which Kalshi accepts, and the signer picks the scheme from the key. Verified on 2026-11-03: authenticated balance request, plus a live WebSocket stream with subscriptions confirmed and snapshots and deltas applied.
 - Groq works with `openai/gpt-oss-120b`. Groq's JSON mode produces malformed output with this model, so it is turned off; the verdict parser pulls the JSON object out of plain text instead. `reasoning_effort` is set to `low`.
+- Each Groq model has its own free quota. `languageModel.fallbackModels` (default `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`) takes over when the primary model hits a long quota wait, returns 404 or is over capacity. Each verdict records the model that gave it. `llama-3.3-70b-versatile` is no longer available to this key.
 - Groq free-tier limits seen: 1,000 requests a day, 8,000 tokens a minute and 200,000 tokens a day. The defaults now assume a paid tier: 250 requests a minute and 8 concurrent requests. On the free tier, set `languageModel.requestsPerMinute` to 10 and `matching.concurrentRequests` to 1. The matcher waits out quota errors of up to 15 minutes either way.
 
 ## Things to know

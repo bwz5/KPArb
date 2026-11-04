@@ -70,6 +70,7 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     const auto languageModel = sectionOf(document, "languageModel");
     readInto(languageModel, "baseUrl", config.languageModel.baseUrl);
     readInto(languageModel, "model", config.languageModel.model);
+    readInto(languageModel, "fallbackModels", config.languageModel.fallbackModels);
     readInto(languageModel, "requestsPerMinute", config.languageModel.requestsPerMinute);
     readInto(languageModel, "maximumAttempts", config.languageModel.maximumAttempts);
     readInto(languageModel, "requestJsonObject", config.languageModel.requestJsonObject);
@@ -96,7 +97,7 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readPathInto(matching, "cachePath", config.matchCachePath);
     readPathInto(matching, "manualMatchesPath", config.manualMatchesPath);
     readPathInto(matching, "matchedPairsPath", config.matchedPairsPath);
-    readPathInto(matching, "teamsPath", config.teamsPath);
+    readPathInto(matching, "entitiesPath", config.entitiesPath);
     readInto(matching, "sharedTeamBonus", config.matcher.candidates.sharedTeamBonus);
 
     const auto arbitrage = sectionOf(document, "arbitrage");

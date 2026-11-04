@@ -7,12 +7,14 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace kparb {
 
 struct ChatCompletionsSettings {
     std::string baseUrl = "https://api.groq.com/openai/v1";
     std::string model = "openai/gpt-oss-120b";
+    std::vector<std::string> fallbackModels{"openai/gpt-oss-20b", "qwen/qwen3.8-27b"};
     std::string apiKey;
     double requestsPerMinute = 250.0;
     int maximumAttempts = 6;
@@ -30,14 +32,19 @@ public:
     std::string modelName() const override;
 
     static std::string buildRequestBody(const ChatCompletionsSettings& settings, const std::vector<ChatMessage>& messages);
+    static std::string buildRequestBody(const ChatCompletionsSettings& settings, const std::string& model, const std::vector<ChatMessage>& messages);
     static LanguageModelResponse parseResponseBody(const std::string& body);
 
 private:
     void waitForRateLimit();
+    std::size_t availableModel(std::int64_t& secondsUntilAvailable);
+    void pauseModel(std::size_t modelIndex, std::int64_t seconds);
 
     ChatCompletionsSettings settings;
+    std::vector<std::string> models;
     std::mutex rateLimitMutex;
     std::chrono::steady_clock::time_point nextAllowedRequest = std::chrono::steady_clock::now();
+    std::vector<std::chrono::steady_clock::time_point> modelAvailableAt;
 };
 
 }
