@@ -249,6 +249,7 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
                 exitCode = 1;
                 break;
             case StreamOutcome::ShutdownRequested:
+                break;
             case StreamOutcome::SessionEnded:
                 if (Clock::now() < cycleDeadline) {
                     std::cout << "restarting stream with " << matcher.acceptedPairCount() << " pairs\n";

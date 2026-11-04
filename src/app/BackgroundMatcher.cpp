@@ -106,7 +106,8 @@ void BackgroundMatcher::run()
         if (progress.candidatesProcessed == 1) {
             std::cout << "candidate pairs: " << progress.candidatesTotal << '\n';
         }
-        const bool isInteresting = verdict.isSameEvent || verdict.reason.rfind("error:", 0) == 0;
+        const bool isInteresting = verdict.isSameEvent || verdict.reason.rfind("error:", 0) == 0
+            || verdict.reason.rfind("waiting", 0) == 0;
         if (isInteresting || progress.candidatesProcessed % 100 == 0) {
             std::ostringstream line;
             line << "  [" << progress.candidatesProcessed << '/' << progress.candidatesTotal << " llm=" << progress.languageModelRequests

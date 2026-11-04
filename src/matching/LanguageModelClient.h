@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@ struct LanguageModelResponse {
     bool succeeded = false;
     std::string content;
     std::string errorMessage;
+    std::int64_t retryAfterSeconds = 0;
 };
 
 class LanguageModelClient {

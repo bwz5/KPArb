@@ -24,6 +24,7 @@ struct MatcherSettings {
     std::size_t saveInterval = 20;
     std::size_t maximumRulesCharacters = 800;
     std::size_t maximumConsecutiveFailures = 5;
+    std::int64_t maximumQuotaWaitSeconds = 900;
 };
 
 struct MatcherProgress {
@@ -31,6 +32,7 @@ struct MatcherProgress {
     std::size_t candidatesProcessed = 0;
     std::size_t languageModelRequests = 0;
     std::size_t pairsAccepted = 0;
+    std::size_t quotaWaits = 0;
     bool isLanguageModelDisabled = false;
 };
 
@@ -53,6 +55,7 @@ public:
     const MatcherProgress& lastProgress() const noexcept;
 
 private:
+    bool waitUnlessStopped(std::int64_t seconds);
     void logEvent(MatchEventCode code, std::int64_t first = 0, std::int64_t second = 0, std::int64_t third = 0) noexcept;
     static MatchedPair makePair(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket, bool isInverted, double confidence);
 

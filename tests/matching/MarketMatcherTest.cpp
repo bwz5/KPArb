@@ -175,6 +175,51 @@ public:
     int requestCount = 0;
 };
 
+class QuotaLimitedLanguageModel final : public LanguageModelClient {
+public:
+    LanguageModelResponse complete(const std::vector<ChatMessage>& messages) override
+    {
+        ++requestCount;
+        if (requestCount == 1) {
+            return {false, "", "HTTP 429 tokens per day", 1};
+        }
+        return fallback.complete(messages);
+    }
+
+    std::string modelName() const override
+    {
+        return "quota-model";
+    }
+
+    int requestCount = 0;
+    FakeLanguageModel fallback;
+};
+
+TEST_F(MarketMatcherTest, ShortQuotaWaitsRetryTheSameCandidate)
+{
+    store->load();
+    QuotaLimitedLanguageModel limited;
+    MarketMatcher matcher(settings, limited, *store, *channel);
+    const auto pairs = matcher.match(kalshi, polymarket);
+    EXPECT_EQ(pairs.size(), 2U);
+    EXPECT_EQ(limited.requestCount, 4);
+    EXPECT_EQ(matcher.lastProgress().quotaWaits, 1U);
+    EXPECT_FALSE(matcher.lastProgress().isLanguageModelDisabled);
+}
+
+TEST_F(MarketMatcherTest, LongQuotaWaitsCountAsFailures)
+{
+    settings.maximumQuotaWaitSeconds = 0;
+    store->load();
+    QuotaLimitedLanguageModel limited;
+    MarketMatcher matcher(settings, limited, *store, *channel);
+    const auto pairs = matcher.match(kalshi, polymarket);
+    EXPECT_EQ(matcher.lastProgress().quotaWaits, 0U);
+    EXPECT_EQ(limited.requestCount, 3);
+    EXPECT_EQ(store->verdictCount(), 2U);
+    EXPECT_LE(pairs.size(), 2U);
+}
+
 TEST_F(MarketMatcherTest, RepeatedFailuresDisableTheLanguageModel)
 {
     settings.maximumConsecutiveFailures = 2;

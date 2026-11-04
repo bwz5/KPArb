@@ -4,6 +4,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <chrono>
+#include <thread>
+
 #include <cstdlib>
 #include <ctime>
 #include <set>
@@ -154,6 +157,18 @@ MatchedPair MarketMatcher::makePair(const MarketInfo& kalshiMarket, const Market
     return pair;
 }
 
+bool MarketMatcher::waitUnlessStopped(std::int64_t seconds)
+{
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (stopRequested.load(std::memory_order_acquire)) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    return !stopRequested.load(std::memory_order_acquire);
+}
+
 void MarketMatcher::requestStop() noexcept
 {
     stopRequested.store(true, std::memory_order_release);
@@ -194,7 +209,23 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
                 continue;
             }
             ++progress.languageModelRequests;
-            const LanguageModelResponse response = model.complete(buildMessages(kalshiMarket, polymarketMarket));
+            LanguageModelResponse response = model.complete(buildMessages(kalshiMarket, polymarketMarket));
+            while (!response.succeeded && response.retryAfterSeconds > 0
+                && response.retryAfterSeconds <= settings.maximumQuotaWaitSeconds) {
+                ++progress.quotaWaits;
+                if (onProgress) {
+                    MatchVerdict waiting;
+                    waiting.reason = "waiting " + std::to_string(response.retryAfterSeconds) + "s for language model quota";
+                    onProgress(progress, kalshiMarket, polymarketMarket, waiting);
+                }
+                if (!waitUnlessStopped(response.retryAfterSeconds)) {
+                    break;
+                }
+                response = model.complete(buildMessages(kalshiMarket, polymarketMarket));
+            }
+            if (stopRequested.load(std::memory_order_acquire) && !response.succeeded) {
+                break;
+            }
             if (!response.succeeded) {
                 logEvent(MatchEventCode::LanguageModelFailure, static_cast<std::int64_t>(candidate.kalshiIndex),
                     static_cast<std::int64_t>(candidate.polymarketIndex), similarityPermille);

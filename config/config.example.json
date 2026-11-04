@@ -28,7 +28,7 @@
     "model": "openai/gpt-oss-120b",
     "requestsPerMinute": 10,
     "maximumAttempts": 6,
-    "maximumOutputTokens": 700,
+    "maximumOutputTokens": 400,
     "reasoningEffort": "low",
     "requestJsonObject": false,
     "maximumRetryAfterSeconds": 120
@@ -50,6 +50,7 @@
     "maximumLanguageModelRequests": 900,
     "maximumRulesCharacters": 800,
     "maximumConsecutiveFailures": 5,
+    "maximumQuotaWaitSeconds": 900,
     "cachePath": "data/match_cache.json",
     "manualMatchesPath": "data/manual_matches.json",
     "matchedPairsPath": "data/matched_pairs.json"

@@ -15,7 +15,7 @@ struct ChatCompletionsSettings {
     std::string apiKey;
     double requestsPerMinute = 10.0;
     int maximumAttempts = 6;
-    int maximumOutputTokens = 700;
+    int maximumOutputTokens = 400;
     std::string reasoningEffort = "low";
     bool requestJsonObject = false;
     std::int64_t maximumRetryAfterSeconds = 120;

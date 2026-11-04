@@ -93,6 +93,7 @@ LanguageModelResponse ChatCompletionsClient::complete(const std::vector<ChatMess
         }
         lastFailure.errorMessage = "HTTP " + std::to_string(response.statusCode) + " " + response.errorMessage + " "
             + response.body.substr(0, 300);
+        lastFailure.retryAfterSeconds = response.retryAfterSeconds;
         const bool isRetryable = response.statusCode == 0 || response.statusCode == 429 || response.statusCode >= 500;
         if (!isRetryable || response.retryAfterSeconds > settings.maximumRetryAfterSeconds) {
             break;
