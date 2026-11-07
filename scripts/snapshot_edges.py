@@ -23,6 +23,8 @@ def fetch_json(url):
             if error.code not in (429, 500, 502, 503, 504):
                 raise
             time.sleep(1 + attempt)
+        except OSError:
+            time.sleep(1 + attempt)
     return None
 
 
