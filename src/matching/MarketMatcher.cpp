@@ -1,6 +1,7 @@
 #include "matching/MarketMatcher.h"
 
 #include "common/Clock.h"
+#include "matching/EntityMatchRule.h"
 
 #include <nlohmann/json.hpp>
 
@@ -194,6 +195,7 @@ void MarketMatcher::acceptIfMatched(MatchRun& run, const CandidatePair& candidat
     const EntityPolarity polarity = entityPolarity(kalshiMarket, polymarketMarket);
     const bool isInverted = polarity == EntityPolarity::Unknown ? verdict.isInverted : polarity == EntityPolarity::Inverted;
     if (verdict.isSameEvent && verdict.confidence >= settings.minimumConfidence && polarity != EntityPolarity::Conflicting
+        && !haveConflictingDates(kalshiMarket, polymarketMarket)
         && run.accepted.emplace(kalshiMarket.identifier, polymarketMarket.identifier).second) {
         run.pairs.push_back(makePair(kalshiMarket, polymarketMarket, isInverted, verdict.confidence));
         if (isInverted != verdict.isInverted) {
@@ -306,6 +308,7 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
     progress.candidatesTotal = candidates.size();
     MatchRun run{kalshiMarkets, polymarketMarkets, candidates, onProgress, onPairAccepted, {}, {}, 0, 0};
     std::vector<std::size_t> pending;
+    const std::vector<bool> entityRuleMatches = findEntityRuleMatches(kalshiMarkets, polymarketMarkets, candidates);
 
     for (std::size_t candidateIndex = 0; candidateIndex < candidates.size(); ++candidateIndex) {
         const CandidatePair& candidate = candidates[candidateIndex];
@@ -315,7 +318,17 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
             ++progress.candidatesProcessed;
             continue;
         }
-        const std::optional<MatchVerdict> verdict = store.findVerdict(kalshiMarket.identifier, polymarketMarket.identifier);
+        std::optional<MatchVerdict> verdict = store.findVerdict(kalshiMarket.identifier, polymarketMarket.identifier);
+        if (verdict && verdict->model == "entity-rule" && !entityRuleMatches[candidateIndex]) {
+            verdict.reset();
+        }
+        if (entityRuleMatches[candidateIndex] && (!verdict || verdict->model != "entity-rule")) {
+            verdict = entityRuleVerdict(kalshiMarket, polymarketMarket);
+            verdict->decidedAtSeconds = wallClockSeconds();
+            store.recordVerdict(kalshiMarket.identifier, polymarketMarket.identifier, *verdict);
+            ++run.unsavedVerdicts;
+            ++progress.entityRuleMatches;
+        }
         if (!verdict) {
             pending.push_back(candidateIndex);
             continue;

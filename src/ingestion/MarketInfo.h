@@ -25,6 +25,7 @@ struct MarketInfo {
     std::int64_t closeTimeSeconds = 0;
     std::int64_t resolutionDeadlineSeconds = 0;
     std::int64_t openTimeSeconds = 0;
+    std::int64_t scheduledStartSeconds = 0;
     bool isAcceptingOrders = false;
     double takerFeeRate = 0.0;
     double takerFeeExponent = 1.0;

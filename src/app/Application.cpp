@@ -19,6 +19,7 @@
 #include "logging/RecordFormatting.h"
 #include "logging/RecordTypes.h"
 #include "matching/CandidateFinder.h"
+#include "matching/EntityMatchRule.h"
 #include "matching/MatchStore.h"
 
 #if defined(__APPLE__)
@@ -185,21 +186,34 @@ int Application::runCandidatesOnly(LogChannels& channels)
 
     std::filesystem::create_directories(options.candidatesPath.parent_path());
     std::ofstream file(options.candidatesPath);
-    file << "score\tcached_verdict\tkalshi_ticker\tkalshi_text\tpolymarket_slug\tpolymarket_text\n";
+    file << "score\tcached_verdict\tentity_rule\tkalshi_ticker\tkalshi_text\tpolymarket_slug\tpolymarket_text\n";
+    const std::vector<bool> entityRuleMatches = findEntityRuleMatches(markets.kalshi, markets.polymarket, candidates);
     std::size_t cachedMatches = 0;
     std::size_t cachedRejections = 0;
-    for (const CandidatePair& candidate : candidates) {
+    std::size_t ruleMatches = 0;
+    std::size_t ruleMatchesConfirmedByCache = 0;
+    std::size_t ruleMatchesRejectedByCache = 0;
+    for (std::size_t candidateIndex = 0; candidateIndex < candidates.size(); ++candidateIndex) {
+        const CandidatePair& candidate = candidates[candidateIndex];
         const MarketInfo& kalshiMarket = markets.kalshi[candidate.kalshiIndex];
         const MarketInfo& polymarketMarket = markets.polymarket[candidate.polymarketIndex];
         const auto verdict = store.findVerdict(kalshiMarket.identifier, polymarketMarket.identifier);
         const char* verdictText = !verdict ? "unknown" : verdict->isSameEvent ? "match" : "different";
         cachedMatches += verdict && verdict->isSameEvent ? 1 : 0;
         cachedRejections += verdict && !verdict->isSameEvent ? 1 : 0;
-        file << candidate.score << '\t' << verdictText << '\t' << kalshiMarket.identifier << '\t' << matchingTextFor(kalshiMarket) << '\t'
+        const bool isRuleMatch = entityRuleMatches[candidateIndex];
+        const bool isLanguageModelVerdict = verdict && verdict->model != "entity-rule";
+        ruleMatches += isRuleMatch ? 1 : 0;
+        ruleMatchesConfirmedByCache += isRuleMatch && isLanguageModelVerdict && verdict->isSameEvent ? 1 : 0;
+        ruleMatchesRejectedByCache += isRuleMatch && isLanguageModelVerdict && !verdict->isSameEvent ? 1 : 0;
+        const char* ruleText = !isRuleMatch ? "-" : entityPolarity(kalshiMarket, polymarketMarket) == EntityPolarity::Inverted ? "inverted" : "aligned";
+        file << candidate.score << '\t' << verdictText << '\t' << ruleText << '\t' << kalshiMarket.identifier << '\t' << matchingTextFor(kalshiMarket) << '\t'
              << polymarketMarket.eventIdentifier << '\t' << matchingTextFor(polymarketMarket) << '\n';
     }
     std::cout << "candidate pairs: " << candidates.size() << " (cached matches " << cachedMatches << ", cached rejections "
               << cachedRejections << ", unknown " << candidates.size() - cachedMatches - cachedRejections << ")\n"
+              << "entity rule matches: " << ruleMatches << " (language model agreed " << ruleMatchesConfirmedByCache << ", disagreed "
+              << ruleMatchesRejectedByCache << ")\n"
               << "wrote " << options.candidatesPath.string() << '\n';
     return 0;
 }

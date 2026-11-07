@@ -131,7 +131,8 @@ PolymarketPage parsePolymarketMarketsPage(std::string_view body, std::vector<Mar
         info.yesTokenIdentifier = tokens[0];
         info.noTokenIdentifier = tokens[1];
         info.resolutionDeadlineSeconds = parseIsoTimestampSeconds(readString(market, "endDate")).value_or(0);
-        info.closeTimeSeconds = parseIsoTimestampSeconds(readString(market, "gameStartTime")).value_or(info.resolutionDeadlineSeconds);
+        info.scheduledStartSeconds = parseIsoTimestampSeconds(readString(market, "gameStartTime")).value_or(0);
+        info.closeTimeSeconds = info.scheduledStartSeconds != 0 ? info.scheduledStartSeconds : info.resolutionDeadlineSeconds;
         info.isAcceptingOrders = readBoolean(market, "acceptingOrders", false);
         info.openTimeSeconds = parseIsoTimestampSeconds(readString(market, "acceptingOrdersTimestamp")).value_or(0);
         if (info.openTimeSeconds == 0) {

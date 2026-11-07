@@ -1,5 +1,6 @@
 add_library(kparb_matching STATIC
     CandidateFinder.cpp
+    EntityMatchRule.cpp
     ChatCompletionsClient.cpp
     MarketMatcher.cpp
     MatchStore.cpp

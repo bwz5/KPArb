@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "matching/ChatCompletionsClient.h"
 #include "matching/MarketMatcher.h"
 
@@ -13,6 +14,9 @@
 
 namespace kparb {
 namespace {
+
+using namespace test_constants::matching_test;
+using namespace test_constants::time_units;
 
 class FakeLanguageModel final : public LanguageModelClient {
 public:
@@ -48,7 +52,7 @@ MarketInfo market(Venue venue, std::string identifier, std::string title)
     info.noOutcomeName = "No";
     info.yesTokenIdentifier = info.identifier + "-yes";
     info.noTokenIdentifier = info.identifier + "-no";
-    info.closeTimeSeconds = 1'000'000;
+    info.closeTimeSeconds = standardCloseSeconds;
     return info;
 }
 
@@ -60,7 +64,7 @@ protected:
         std::filesystem::remove_all(directory);
         std::filesystem::create_directories(directory);
         store = std::make_unique<MatchStore>(directory / "cache.json", directory / "manual.json");
-        settings.candidates.minimumSimilarity = 0.3;
+        settings.candidates.minimumSimilarity = strictSimilarity;
         settings.concurrentRequests = 1;
     }
 
@@ -91,8 +95,8 @@ TEST_F(MarketMatcherTest, AcceptsConfirmedPairsAndRecordsPolarity)
     store->load();
     MarketMatcher matcher(settings, model, *store, *channel);
     const auto pairs = matcher.match(kalshi, polymarket);
-    ASSERT_EQ(pairs.size(), 2U);
-    EXPECT_EQ(model.requestCount, 3);
+    ASSERT_EQ(pairs.size(), confirmedPairCount);
+    EXPECT_EQ(model.requestCount, static_cast<int>(testMarketCount));
 
     const auto findPair = [&pairs](const std::string& ticker) {
         return std::find_if(pairs.begin(), pairs.end(), [&ticker](const MatchedPair& pair) { return pair.kalshiTicker == ticker; });
@@ -106,7 +110,7 @@ TEST_F(MarketMatcherTest, AcceptsConfirmedPairsAndRecordsPolarity)
     const auto bitcoin = findPair("K-BTC");
     ASSERT_NE(bitcoin, pairs.end());
     EXPECT_TRUE(bitcoin->isInverted);
-    EXPECT_DOUBLE_EQ(bitcoin->confidence, 0.95);
+    EXPECT_DOUBLE_EQ(bitcoin->confidence, mirroredConfidence);
     EXPECT_EQ(findPair("K-SB"), pairs.end());
 }
 
@@ -122,7 +126,7 @@ TEST_F(MarketMatcherTest, OutcomeEntitiesDecidePolarityOverTheLanguageModel)
     std::vector<MarketInfo> polymarketGames{market(Venue::Polymarket, "P-GAME", "Fed Coastal Carolina Chanticleers vs. Duke Blue Devils")};
     polymarketGames[0].yesOutcomeEntityKey = "cbb:CCAR";
     polymarketGames[0].noOutcomeEntityKey = "cbb:DUKE";
-    settings.candidates.minimumSimilarity = 0.0;
+    settings.candidates.minimumSimilarity = noSimilarityRequired;
     MarketMatcher matcher(settings, model, *store, *channel);
     const auto pairs = matcher.match(kalshiGames, polymarketGames);
     ASSERT_EQ(pairs.size(), 1U);
@@ -136,6 +140,28 @@ TEST_F(MarketMatcherTest, OutcomeEntitiesDecidePolarityOverTheLanguageModel)
     EXPECT_EQ(entityPolarity(kalshiGames[0], yesNoMarket), EntityPolarity::Aligned);
 }
 
+TEST_F(MarketMatcherTest, EntityResolvedMoneylinesSkipTheLanguageModel)
+{
+    store->load();
+    MarketInfo kalshiGame = market(Venue::Kalshi, "KXNCAAMBGAME-26NOV05PENNILL-ILL", "Illinois Fighting Illini wins");
+    kalshiGame.eventIdentifier = "KXNCAAMBGAME-26NOV05PENNILL";
+    kalshiGame.teamKeys = {"cbb:ILL", "cbb:PENN"};
+    kalshiGame.subjectTeamKey = "cbb:ILL";
+    MarketInfo polymarketGame = market(Venue::Polymarket, "0xgame", "Penn Quakers vs. Illinois Fighting Illini");
+    polymarketGame.eventIdentifier = "cbb-penn-ill-2026-11-05";
+    polymarketGame.teamKeys = {"cbb:ILL", "cbb:PENN"};
+    polymarketGame.yesOutcomeEntityKey = "cbb:PENN";
+    polymarketGame.noOutcomeEntityKey = "cbb:ILL";
+    settings.candidates.minimumSimilarity = noSimilarityRequired;
+    MarketMatcher matcher(settings, model, *store, *channel);
+    const auto pairs = matcher.match({kalshiGame}, {polymarketGame});
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_TRUE(pairs[0].isInverted);
+    EXPECT_EQ(model.requestCount, 0);
+    EXPECT_EQ(matcher.lastProgress().entityRuleMatches, 1U);
+    EXPECT_EQ(store->findVerdict(kalshiGame.identifier, polymarketGame.identifier)->model, "entity-rule");
+}
+
 TEST_F(MarketMatcherTest, CachedVerdictsSkipTheLanguageModel)
 {
     store->load();
@@ -143,14 +169,14 @@ TEST_F(MarketMatcherTest, CachedVerdictsSkipTheLanguageModel)
         MarketMatcher matcher(settings, model, *store, *channel);
         matcher.match(kalshi, polymarket);
     }
-    EXPECT_EQ(model.requestCount, 3);
+    EXPECT_EQ(model.requestCount, static_cast<int>(testMarketCount));
     MatchStore reloaded(directory / "cache.json", directory / "manual.json");
     reloaded.load();
-    EXPECT_EQ(reloaded.verdictCount(), 3U);
+    EXPECT_EQ(reloaded.verdictCount(), testMarketCount);
     MarketMatcher matcher(settings, model, reloaded, *channel);
     const auto pairs = matcher.match(kalshi, polymarket);
-    EXPECT_EQ(model.requestCount, 3);
-    EXPECT_EQ(pairs.size(), 2U);
+    EXPECT_EQ(model.requestCount, static_cast<int>(testMarketCount));
+    EXPECT_EQ(pairs.size(), confirmedPairCount);
 }
 
 TEST_F(MarketMatcherTest, ManualOverridesIncludeAndExclude)
@@ -160,8 +186,8 @@ TEST_F(MarketMatcherTest, ManualOverridesIncludeAndExclude)
     store->load();
     MarketMatcher matcher(settings, model, *store, *channel);
     const auto pairs = matcher.match(kalshi, polymarket);
-    ASSERT_EQ(pairs.size(), 2U);
-    EXPECT_EQ(model.requestCount, 2);
+    ASSERT_EQ(pairs.size(), confirmedPairCount);
+    EXPECT_EQ(model.requestCount, requestsAfterManualExclusion);
     EXPECT_TRUE(std::any_of(pairs.begin(), pairs.end(), [](const MatchedPair& pair) { return pair.isManual && pair.kalshiTicker == "K-SB"; }));
     EXPECT_FALSE(std::any_of(pairs.begin(), pairs.end(), [](const MatchedPair& pair) { return pair.kalshiTicker == "K-FED"; }));
 }
@@ -182,11 +208,11 @@ TEST_F(MarketMatcherTest, PromptNamesBothOutcomes)
     polymarketMarket.yesOutcomeName = "Chiefs";
     polymarketMarket.noOutcomeName = "Eagles";
     const auto messages = matcher.buildMessages(kalshi[0], polymarketMarket);
-    ASSERT_EQ(messages.size(), 2U);
+    ASSERT_EQ(messages.size(), promptMessageCount);
     EXPECT_EQ(messages[0].role, "system");
-    EXPECT_NE(messages[1].content.find("\"Chiefs\""), std::string::npos);
-    EXPECT_NE(messages[1].content.find("\"Eagles\""), std::string::npos);
-    EXPECT_NE(messages[1].content.find("JSON"), std::string::npos);
+    EXPECT_NE(messages[userMessageIndex].content.find("\"Chiefs\""), std::string::npos);
+    EXPECT_NE(messages[userMessageIndex].content.find("\"Eagles\""), std::string::npos);
+    EXPECT_NE(messages[userMessageIndex].content.find("JSON"), std::string::npos);
 }
 
 class FailingLanguageModel final : public LanguageModelClient {
@@ -211,7 +237,7 @@ public:
     {
         ++requestCount;
         if (requestCount == 1) {
-            return {false, "", "HTTP 429 tokens per day", 1};
+            return {false, "", "HTTP 429 tokens per day", shortQuotaWaitSeconds};
         }
         return fallback.complete(messages);
     }
@@ -231,34 +257,34 @@ TEST_F(MarketMatcherTest, ShortQuotaWaitsRetryTheSameCandidate)
     QuotaLimitedLanguageModel limited;
     MarketMatcher matcher(settings, limited, *store, *channel);
     const auto pairs = matcher.match(kalshi, polymarket);
-    EXPECT_EQ(pairs.size(), 2U);
-    EXPECT_EQ(limited.requestCount, 4);
+    EXPECT_EQ(pairs.size(), confirmedPairCount);
+    EXPECT_EQ(limited.requestCount, requestsWithOneRetry);
     EXPECT_EQ(matcher.lastProgress().quotaWaits, 1U);
     EXPECT_FALSE(matcher.lastProgress().isLanguageModelDisabled);
 }
 
 TEST_F(MarketMatcherTest, LongQuotaWaitsCountAsFailures)
 {
-    settings.maximumQuotaWaitSeconds = 0;
+    settings.maximumQuotaWaitSeconds = noQuotaWaitSeconds;
     store->load();
     QuotaLimitedLanguageModel limited;
     MarketMatcher matcher(settings, limited, *store, *channel);
     const auto pairs = matcher.match(kalshi, polymarket);
     EXPECT_EQ(matcher.lastProgress().quotaWaits, 0U);
-    EXPECT_EQ(limited.requestCount, 3);
-    EXPECT_EQ(store->verdictCount(), 2U);
-    EXPECT_LE(pairs.size(), 2U);
+    EXPECT_EQ(limited.requestCount, static_cast<int>(testMarketCount));
+    EXPECT_EQ(store->verdictCount(), verdictsAfterOneQuotaFailure);
+    EXPECT_LE(pairs.size(), confirmedPairCount);
 }
 
 TEST_F(MarketMatcherTest, RepeatedFailuresDisableTheLanguageModel)
 {
-    settings.maximumConsecutiveFailures = 2;
+    settings.maximumConsecutiveFailures = failuresBeforeDisabling;
     store->load();
     FailingLanguageModel failing;
     MarketMatcher matcher(settings, failing, *store, *channel);
     const auto pairs = matcher.match(kalshi, polymarket);
     EXPECT_TRUE(pairs.empty());
-    EXPECT_EQ(failing.requestCount, 2);
+    EXPECT_EQ(failing.requestCount, static_cast<int>(failuresBeforeDisabling));
     EXPECT_TRUE(matcher.lastProgress().isLanguageModelDisabled);
     EXPECT_EQ(store->verdictCount(), 0U);
 }
@@ -271,7 +297,7 @@ public:
         int previousPeak = peakActiveRequests.load();
         while (active > previousPeak && !peakActiveRequests.compare_exchange_weak(previousPeak, active)) {
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds(concurrentRequestMilliseconds));
         ++requestCount;
         --activeRequests;
         const bool isSuperBowl = messages.back().content.find("Super Bowl") != std::string::npos;
@@ -291,7 +317,7 @@ public:
 
 TEST_F(MarketMatcherTest, ConcurrentRequestsRunInParallelAndRecordEveryVerdict)
 {
-    settings.concurrentRequests = 3;
+    settings.concurrentRequests = parallelRequests;
     store->load();
     ConcurrentLanguageModel concurrent;
     MarketMatcher matcher(settings, concurrent, *store, *channel);
@@ -299,7 +325,7 @@ TEST_F(MarketMatcherTest, ConcurrentRequestsRunInParallelAndRecordEveryVerdict)
     const auto pairs = matcher.match(kalshi, polymarket,
         [&progressCallbacks](const MatcherProgress&, const MarketInfo&, const MarketInfo&, const MatchVerdict&) { ++progressCallbacks; });
     EXPECT_EQ(concurrent.requestCount.load(), static_cast<int>(matcher.lastProgress().candidatesTotal));
-    EXPECT_GE(concurrent.peakActiveRequests.load(), 2);
+    EXPECT_GE(concurrent.peakActiveRequests.load(), minimumObservedParallelism);
     EXPECT_EQ(store->verdictCount(), matcher.lastProgress().candidatesTotal);
     EXPECT_EQ(progressCallbacks, matcher.lastProgress().candidatesTotal);
     EXPECT_EQ(matcher.lastProgress().candidatesProcessed, matcher.lastProgress().candidatesTotal);
@@ -313,7 +339,7 @@ TEST_F(MarketMatcherTest, CachedVerdictsAreAcceptedBeforeNewRequests)
     store->load();
     MatchVerdict cached;
     cached.isSameEvent = true;
-    cached.confidence = 0.99;
+    cached.confidence = cachedConfidence;
     store->recordVerdict("K-BTC", "P-BTC", cached);
     std::vector<std::string> acceptedOrder;
     MarketMatcher matcher(settings, model, *store, *channel);
@@ -327,10 +353,10 @@ TEST_F(MarketMatcherTest, PromptIncludesPolymarketEventAndDeadline)
     MarketMatcher matcher(settings, model, *store, *channel);
     MarketInfo polymarketMarket = polymarket[0];
     polymarketMarket.eventTitle = "Fed decision in December";
-    polymarketMarket.resolutionDeadlineSeconds = polymarketMarket.closeTimeSeconds + 7 * 86400;
+    polymarketMarket.resolutionDeadlineSeconds = polymarketMarket.closeTimeSeconds + daysPerWeek * secondsPerDay;
     const auto messages = matcher.buildMessages(kalshi[0], polymarketMarket);
-    EXPECT_NE(messages[1].content.find("Event: Fed decision in December"), std::string::npos);
-    EXPECT_NE(messages[1].content.find("Resolution deadline:"), std::string::npos);
+    EXPECT_NE(messages[userMessageIndex].content.find("Event: Fed decision in December"), std::string::npos);
+    EXPECT_NE(messages[userMessageIndex].content.find("Resolution deadline:"), std::string::npos);
 }
 
 TEST(VerdictParsingTest, ToleratesFormattingVariations)
@@ -339,7 +365,7 @@ TEST(VerdictParsingTest, ToleratesFormattingVariations)
     const auto verdict = MarketMatcher::parseVerdict(R"(Sure! {"same_event": "true", "is_inverted": false, "confidence": "0.8", "reason": "ok"})");
     ASSERT_TRUE(verdict.has_value());
     EXPECT_TRUE(verdict->isSameEvent);
-    EXPECT_DOUBLE_EQ(verdict->confidence, 0.8);
+    EXPECT_DOUBLE_EQ(verdict->confidence, parsedConfidence);
 }
 
 TEST(ChatCompletionsClientTest, BuildsOpenAiCompatibleRequest)
@@ -349,8 +375,8 @@ TEST(ChatCompletionsClientTest, BuildsOpenAiCompatibleRequest)
     const auto body = nlohmann::json::parse(ChatCompletionsClient::buildRequestBody(settings, {{"system", "s"}, {"user", "u"}}));
     EXPECT_EQ(body["model"], "test-model");
     EXPECT_EQ(body["temperature"], 0);
-    EXPECT_EQ(body["messages"].size(), 2U);
-    EXPECT_EQ(body["messages"][1]["content"], "u");
+    EXPECT_EQ(body["messages"].size(), requestMessageCount);
+    EXPECT_EQ(body["messages"][userMessageIndex]["content"], "u");
     EXPECT_EQ(body["reasoning_effort"], "low");
     EXPECT_FALSE(body.contains("response_format"));
 

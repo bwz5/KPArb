@@ -37,6 +37,7 @@ struct MatcherProgress {
     std::size_t pairsAccepted = 0;
     std::size_t quotaWaits = 0;
     std::size_t polarityCorrections = 0;
+    std::size_t entityRuleMatches = 0;
     bool isLanguageModelDisabled = false;
 };
 

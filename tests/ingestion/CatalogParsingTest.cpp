@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "ingestion/KalshiMarketCatalog.h"
 #include "ingestion/PolymarketMarketCatalog.h"
 
@@ -8,6 +9,10 @@
 
 namespace kparb {
 namespace {
+
+using namespace test_constants::catalog_test;
+using test_constants::fees::linearFeeExponent;
+using test_constants::time_units::secondsPerDay;
 
 std::string readFixture(const std::string& name)
 {
@@ -22,15 +27,15 @@ TEST(CatalogParsingTest, ParsesKalshiBinaryMarketsAndCursor)
     std::vector<MarketInfo> markets;
     const std::string cursor = parseKalshiMarketsPage(readFixture("kalshi_markets_page.json"), markets);
     EXPECT_EQ(cursor, "CgwI2aOvqAYQ+NyHxwISHUtYRkVEREVDSVNJT04tMjZERUMtSDA=");
-    ASSERT_EQ(markets.size(), 2U);
+    ASSERT_EQ(markets.size(), kalshiFixtureMarketCount);
     EXPECT_EQ(markets[0].identifier, "KXFEDDECISION-26DEC-H0");
     EXPECT_EQ(markets[0].subtitle, "Hold rates");
-    EXPECT_EQ(markets[0].closeTimeSeconds, 1796842800);
+    EXPECT_EQ(markets[0].closeTimeSeconds, kalshiFixtureCloseSeconds);
     EXPECT_NE(markets[0].rules.find("Source: Federal Reserve."), std::string::npos);
     EXPECT_EQ(markets[1].identifier, "KXBTC-26DEC31-T100000");
     EXPECT_EQ(markets[1].noOutcomeName, "Below $100,000");
     EXPECT_TRUE(markets[0].isAcceptingOrders);
-    EXPECT_EQ(markets[0].openTimeSeconds, 1793541600);
+    EXPECT_EQ(markets[0].openTimeSeconds, kalshiFixtureOpenSeconds);
     EXPECT_FALSE(markets[1].isAcceptingOrders);
 }
 
@@ -38,7 +43,7 @@ TEST(CatalogParsingTest, ParsesOnlyOpenBinaryPolymarketMarkets)
 {
     std::vector<MarketInfo> markets;
     const PolymarketPage page = parsePolymarketMarketsPage(readFixture("polymarket_markets_page.json"), markets);
-    EXPECT_EQ(page.entryCount, 3U);
+    EXPECT_EQ(page.entryCount, polymarketFixtureEntryCount);
     EXPECT_TRUE(page.nextCursor.empty());
     ASSERT_EQ(markets.size(), 1U);
     const MarketInfo& market = markets[0];
@@ -48,11 +53,11 @@ TEST(CatalogParsingTest, ParsesOnlyOpenBinaryPolymarketMarkets)
     EXPECT_EQ(market.noOutcomeName, "No");
     EXPECT_EQ(market.yesTokenIdentifier.front(), '1');
     EXPECT_EQ(market.noTokenIdentifier.front(), '2');
-    EXPECT_EQ(market.closeTimeSeconds, 1796774400);
-    EXPECT_DOUBLE_EQ(market.takerFeeRate, 0.04);
-    EXPECT_DOUBLE_EQ(market.takerFeeExponent, 1.0);
+    EXPECT_EQ(market.closeTimeSeconds, polymarketFixtureCloseSeconds);
+    EXPECT_DOUBLE_EQ(market.takerFeeRate, polymarketFixtureFeeRate);
+    EXPECT_DOUBLE_EQ(market.takerFeeExponent, linearFeeExponent);
     EXPECT_TRUE(market.isAcceptingOrders);
-    EXPECT_EQ(market.openTimeSeconds, 1790856000);
+    EXPECT_EQ(market.openTimeSeconds, polymarketFixtureOpenSeconds);
 }
 
 TEST(CatalogParsingTest, ParsesPolymarketKeysetEnvelope)
@@ -78,16 +83,17 @@ TEST(CatalogParsingTest, ParsesPolymarketSportsStructure)
          "sportsMarketType":"spreads","line":-7.5,"endDate":"2026-11-04T18:30:00Z"}
     ]})json";
     parsePolymarketMarketsPage(body, markets);
-    ASSERT_EQ(markets.size(), 2U);
+    ASSERT_EQ(markets.size(), sportsMarketCount);
     EXPECT_EQ(markets[0].marketType, "winner");
     EXPECT_EQ(markets[0].eventTitle, "KK Bosna vs. Balkan");
     EXPECT_EQ(markets[0].rulesSummary, "In the upcoming EuroCup game between KK Bosna and Balkan.");
-    EXPECT_EQ(markets[0].closeTimeSeconds, 1793817000);
-    EXPECT_EQ(markets[0].resolutionDeadlineSeconds, 1793817000 + 7 * 86400);
+    EXPECT_EQ(markets[0].closeTimeSeconds, bosnaGameStartSeconds);
+    EXPECT_EQ(markets[0].scheduledStartSeconds, bosnaGameStartSeconds);
+    EXPECT_EQ(markets[0].resolutionDeadlineSeconds, bosnaGameStartSeconds + bosnaResolutionDays * secondsPerDay);
     EXPECT_FALSE(markets[0].hasStrike);
     EXPECT_EQ(markets[1].marketType, "spread");
     EXPECT_TRUE(markets[1].hasStrike);
-    EXPECT_DOUBLE_EQ(markets[1].strike, 7.5);
+    EXPECT_DOUBLE_EQ(markets[1].strike, bosnaSpreadLine);
     EXPECT_EQ(markets[1].closeTimeSeconds, markets[1].resolutionDeadlineSeconds);
 }
 
@@ -102,15 +108,15 @@ TEST(CatalogParsingTest, ParsesKalshiStrikesAndSeriesType)
         {"ticker":"KXGAME-X-TTS","event_ticker":"KXEUROCUPGAME-X","title":"Turk Telekom wins","strike_type":"structured"}
     ],"cursor":""})";
     parseKalshiMarketsPage(body, markets);
-    ASSERT_EQ(markets.size(), 3U);
+    ASSERT_EQ(markets.size(), strikeMarketCount);
     EXPECT_EQ(markets[0].marketType, "total");
     EXPECT_TRUE(markets[0].hasStrike);
-    EXPECT_DOUBLE_EQ(markets[0].strike, 225.5);
+    EXPECT_DOUBLE_EQ(markets[0].strike, atlantaWashingtonTotal);
     EXPECT_EQ(markets[0].rulesSummary, markets[0].rules);
     EXPECT_TRUE(markets[1].hasStrike);
-    EXPECT_DOUBLE_EQ(markets[1].strike, 50.0);
-    EXPECT_EQ(markets[2].marketType, "winner");
-    EXPECT_FALSE(markets[2].hasStrike);
+    EXPECT_DOUBLE_EQ(markets[1].strike, newYorkHighCap);
+    EXPECT_EQ(markets.back().marketType, "winner");
+    EXPECT_FALSE(markets.back().hasStrike);
 }
 
 }
