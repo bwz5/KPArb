@@ -1,2 +1,5 @@
 add_executable(kparb_engine_benchmark ArbitrageEngineBenchmark.cpp)
 target_link_libraries(kparb_engine_benchmark PRIVATE kparb_arbitrage)
+
+add_executable(kparb_latency_benchmark LatencyBenchmark.cpp)
+target_link_libraries(kparb_latency_benchmark PRIVATE kparb_arbitrage kparb_ingestion)
