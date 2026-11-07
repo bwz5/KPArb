@@ -3,9 +3,9 @@
 #include "ingestion/KalshiMessageParser.h"
 #include "ingestion/KalshiSigner.h"
 #include "ingestion/LadderDirectory.h"
+#include "ingestion/SequenceTracker.h"
 #include "ingestion/WebSocketBookFeed.h"
 
-#include <array>
 #include <string>
 #include <vector>
 
@@ -33,14 +33,13 @@ private:
 
     void checkSequence(const KalshiParseResult& result) noexcept;
 
-    static constexpr std::size_t trackedSubscriptionCount = 256;
 
     KalshiFeedSettings settings;
     const KalshiSigner& signer;
     KalshiMessageParser parser;
     std::vector<std::string> subscriptions;
     std::string signedPath;
-    std::array<std::int64_t, trackedSubscriptionCount> lastSequenceBySubscription{};
+    SequenceTracker sequences;
 };
 
 }

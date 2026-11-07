@@ -55,21 +55,17 @@ std::vector<std::string> KalshiBookFeed::subscriptionMessages()
 
 void KalshiBookFeed::onConnectionOpened()
 {
-    lastSequenceBySubscription.fill(0);
+    sequences.reset();
 }
 
 void KalshiBookFeed::handleText(std::string_view text, std::int64_t receivedAtNanos)
 {
     auto deliver = [this](const LadderUpdate& update) { publisher().publish(update); };
     const KalshiParseResult result = parser.parse(text, receivedAtNanos, LadderUpdateSink(deliver));
+    checkSequence(result);
     switch (result.kind) {
     case KalshiMessageKind::Snapshot:
         publisher().logEvent(FeedEventCode::SnapshotReceived, result.subscriptionIdentifier, result.updatesProduced);
-        checkSequence(result);
-        break;
-    case KalshiMessageKind::Delta:
-    case KalshiMessageKind::UnknownMarket:
-        checkSequence(result);
         break;
     case KalshiMessageKind::Subscribed:
         publisher().logEvent(FeedEventCode::SubscriptionConfirmed, result.subscriptionIdentifier, 0);
@@ -80,6 +76,8 @@ void KalshiBookFeed::handleText(std::string_view text, std::int64_t receivedAtNa
     case KalshiMessageKind::Malformed:
         publisher().logEvent(FeedEventCode::ParseError, static_cast<std::int64_t>(text.size()), 0);
         break;
+    case KalshiMessageKind::Delta:
+    case KalshiMessageKind::UnknownMarket:
     case KalshiMessageKind::Ignored:
         break;
     }
@@ -87,17 +85,11 @@ void KalshiBookFeed::handleText(std::string_view text, std::int64_t receivedAtNa
 
 void KalshiBookFeed::checkSequence(const KalshiParseResult& result) noexcept
 {
-    if (result.subscriptionIdentifier < 0 || result.sequenceNumber < 0
-        || result.subscriptionIdentifier >= static_cast<std::int64_t>(trackedSubscriptionCount)) {
-        return;
-    }
-    std::int64_t& lastSequence = lastSequenceBySubscription[static_cast<std::size_t>(result.subscriptionIdentifier)];
-    if (lastSequence != 0 && result.sequenceNumber != lastSequence + 1) {
+    if (!sequences.acceptAndCheckContinuity(result.subscriptionIdentifier, result.sequenceNumber)) {
         publisher().logEvent(FeedEventCode::SequenceGap, result.subscriptionIdentifier, result.sequenceNumber);
         publisher().logEvent(FeedEventCode::ResyncRequested, result.subscriptionIdentifier, 0);
         requestResync();
     }
-    lastSequence = result.sequenceNumber;
 }
 
 }
