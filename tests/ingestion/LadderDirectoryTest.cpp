@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "ingestion/KalshiBookFeed.h"
 #include "ingestion/LadderDirectory.h"
 #include "ingestion/PolymarketBookFeed.h"
@@ -10,6 +11,8 @@
 namespace kparb {
 namespace {
 
+using namespace test_constants::ladder_directory_test;
+
 TEST(LadderDirectoryTest, FansOutSharedMarketsToEveryPair)
 {
     const LadderDirectory directory(std::vector<PairSubscription>{
@@ -17,31 +20,31 @@ TEST(LadderDirectoryTest, FansOutSharedMarketsToEveryPair)
         {"K1", "yes-b", "no-b"},
         {"K2", "no-a", "yes-a"},
     });
-    EXPECT_EQ(directory.pairCount(), 3U);
+    EXPECT_EQ(directory.pairCount(), subscribedPairCount);
     const auto* kalshiTargets = directory.findKalshiMarket("K1");
     ASSERT_NE(kalshiTargets, nullptr);
-    ASSERT_EQ(kalshiTargets->size(), 2U);
-    EXPECT_EQ((*kalshiTargets)[1].buyNoLadder, ladderIndexFor(1, LadderSlot::KalshiBuyNo));
+    ASSERT_EQ(kalshiTargets->size(), pairsSharingKalshiMarket);
+    EXPECT_EQ(kalshiTargets->back().buyNoLadder, ladderIndexFor(secondPair, LadderSlot::KalshiBuyNo));
 
     const auto* tokenLadders = directory.findPolymarketToken("yes-a");
     ASSERT_NE(tokenLadders, nullptr);
-    ASSERT_EQ(tokenLadders->size(), 2U);
-    EXPECT_EQ((*tokenLadders)[0], ladderIndexFor(0, LadderSlot::PolymarketBuyYes));
-    EXPECT_EQ((*tokenLadders)[1], ladderIndexFor(2, LadderSlot::PolymarketBuyNo));
+    ASSERT_EQ(tokenLadders->size(), pairsSharingPolymarketToken);
+    EXPECT_EQ(tokenLadders->front(), ladderIndexFor(firstPair, LadderSlot::PolymarketBuyYes));
+    EXPECT_EQ(tokenLadders->back(), ladderIndexFor(thirdPair, LadderSlot::PolymarketBuyNo));
     EXPECT_EQ(directory.findPolymarketToken("missing"), nullptr);
-    EXPECT_EQ(directory.kalshiTickers().size(), 2U);
-    EXPECT_EQ(directory.polymarketTokens().size(), 4U);
+    EXPECT_EQ(directory.kalshiTickers().size(), distinctKalshiTickers);
+    EXPECT_EQ(directory.polymarketTokens().size(), distinctPolymarketTokens);
 }
 
 TEST(LadderDirectoryTest, SubscriptionMessagesAreChunked)
 {
     const std::vector<std::string> tickers{"A", "B", "C"};
-    const auto kalshiMessages = buildKalshiSubscriptionMessages(tickers, 2);
-    ASSERT_EQ(kalshiMessages.size(), 2U);
+    const auto kalshiMessages = buildKalshiSubscriptionMessages(tickers, subscriptionChunkSize);
+    ASSERT_EQ(kalshiMessages.size(), subscriptionMessageCount);
     EXPECT_EQ(kalshiMessages[0], R"({"cmd":"subscribe","id":1,"params":{"channels":["orderbook_delta"],"market_tickers":["A","B"]}})");
 
-    const auto polymarketMessages = buildPolymarketSubscriptionMessages(tickers, 2);
-    ASSERT_EQ(polymarketMessages.size(), 2U);
+    const auto polymarketMessages = buildPolymarketSubscriptionMessages(tickers, subscriptionChunkSize);
+    ASSERT_EQ(polymarketMessages.size(), subscriptionMessageCount);
     EXPECT_EQ(polymarketMessages[0], R"({"assets_ids":["A","B"],"type":"market"})");
     EXPECT_EQ(polymarketMessages[1], R"({"assets_ids":["C"],"operation":"subscribe"})");
 }

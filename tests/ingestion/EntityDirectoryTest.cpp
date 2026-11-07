@@ -1,9 +1,12 @@
+#include "TestConstants.h"
 #include "ingestion/EntityDirectory.h"
 
 #include <gtest/gtest.h>
 
 namespace kparb {
 namespace {
+
+using namespace test_constants::entity_directory_test;
 
 const char* const entitiesJson = R"json({"leagues":[
     {"name":"nhl","kalshiSeriesPrefix":"KXNHL","polymarketSlugPrefix":"nhl-","entities":[
@@ -51,7 +54,7 @@ MarketInfo polymarketMarket(std::string slug, std::string title)
 TEST(EntityDirectoryTest, BothVenuesEndUpWithTheSameEntityNames)
 {
     const EntityDirectory entities = EntityDirectory::parse(entitiesJson);
-    EXPECT_EQ(entities.entityCount(), 16U);
+    EXPECT_EQ(entities.entityCount(), fixtureEntityCount);
     MarketInfo kalshi = kalshiMarket("KXNHLGAME-26NOV04CGYSEA", "KXNHLGAME-26NOV04CGYSEA-CGY", "Calgary wins");
     kalshi.rulesSummary = "If Calgary wins the Calgary vs Seattle NHL game originally scheduled for Nov 4, 2026, then the market resolves to Yes.";
     kalshi.yesOutcomeName = "Calgary";
@@ -155,8 +158,8 @@ TEST(EntityDirectoryTest, MissingFileMeansNoEntities)
 TEST(EntityDirectoryTest, ShippedEntityFileLinksBothVenues)
 {
     const EntityDirectory entities = EntityDirectory::load(std::string(KPARB_FIXTURE_DIRECTORY) + "/../../config/entities.json");
-    EXPECT_GE(entities.leagueCount(), 4U);
-    EXPECT_GE(entities.entityCount(), 126U);
+    EXPECT_GE(entities.leagueCount(), minimumConfiguredLeagueCount);
+    EXPECT_GE(entities.entityCount(), minimumConfiguredEntityCount);
     MarketInfo kalshi = kalshiMarket("KXNFLGAME-26NOV05JACBAL", "KXNFLGAME-26NOV05JACBAL-JAC", "Jacksonville at Baltimore Winner?");
     MarketInfo polymarket = polymarketMarket("nfl-jax-bal-2026-11-06-player-props", "Jaguars vs. Ravens - Player Props");
     entities.annotate(kalshi);

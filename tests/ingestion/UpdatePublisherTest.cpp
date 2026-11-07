@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "ingestion/UpdatePublisher.h"
 
 #include <gtest/gtest.h>
@@ -7,13 +8,15 @@
 namespace kparb {
 namespace {
 
+using namespace test_constants::publisher_test;
+
 TEST(UpdatePublisherTest, OverflowSignalsAndInsertsResetBeforeNextUpdate)
 {
     auto queue = std::make_unique<LadderUpdateQueue>();
-    auto channel = std::make_unique<LogChannel>(2);
+    auto channel = std::make_unique<LogChannel>(channelSource);
     UpdatePublisher publisher(Venue::Polymarket, *queue, *channel);
 
-    const LadderUpdate update{1, 4, 10, 500, UpdateKind::SetLevel, Venue::Polymarket};
+    const LadderUpdate update{updateNanos, ladderIndex, quantity, price, UpdateKind::SetLevel, Venue::Polymarket};
     for (std::size_t index = 0; index < ladderUpdateQueueCapacity; ++index) {
         publisher.publish(update);
     }

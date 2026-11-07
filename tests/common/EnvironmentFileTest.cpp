@@ -1,9 +1,12 @@
+#include "TestConstants.h"
 #include "common/EnvironmentFile.h"
 
 #include <gtest/gtest.h>
 
 namespace kparb {
 namespace {
+
+using namespace test_constants::environment_test;
 
 TEST(EnvironmentFileTest, ParsesPlainQuotedAndExportedValues)
 {
@@ -15,13 +18,13 @@ TEST(EnvironmentFileTest, ParsesPlainQuotedAndExportedValues)
         "SINGLE='keep \\n literal'\n"
         "\n"
         "EMPTY=\n");
-    ASSERT_EQ(entries.size(), 5U);
-    EXPECT_EQ(entries[0].first, "PLAIN");
-    EXPECT_EQ(entries[0].second, "value");
-    EXPECT_EQ(entries[1].first, "EXPORTED");
-    EXPECT_EQ(entries[2].second, "line one\nline two");
-    EXPECT_EQ(entries[3].second, "keep \\n literal");
-    EXPECT_EQ(entries[4].second, "");
+    ASSERT_EQ(entries.size(), parsedEntryCount);
+    EXPECT_EQ(entries[plainEntry].first, "PLAIN");
+    EXPECT_EQ(entries[plainEntry].second, "value");
+    EXPECT_EQ(entries[exportedEntry].first, "EXPORTED");
+    EXPECT_EQ(entries[quotedEntry].second, "line one\nline two");
+    EXPECT_EQ(entries[singleQuotedEntry].second, "keep \\n literal");
+    EXPECT_EQ(entries[emptyEntry].second, "");
 }
 
 TEST(EnvironmentFileTest, IgnoresLinesWithoutSeparator)

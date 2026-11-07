@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "logging/LogChannel.h"
 #include "logging/RecordTypes.h"
 
@@ -7,6 +8,8 @@
 
 namespace kparb {
 namespace {
+
+using namespace test_constants::log_channel_test;
 
 TEST(LogChannelOverflowTest, DropsAndCountsWhenFull)
 {
@@ -18,9 +21,10 @@ TEST(LogChannelOverflowTest, DropsAndCountsWhenFull)
     for (std::size_t index = 0; index < logChannelCapacity; ++index) {
         ASSERT_TRUE(channel->write(event));
     }
-    EXPECT_FALSE(channel->write(event));
-    EXPECT_FALSE(channel->write(event));
-    EXPECT_EQ(channel->droppedRecordCount(), 2U);
+    for (std::size_t index = 0; index < overflowWriteCount; ++index) {
+        EXPECT_FALSE(channel->write(event));
+    }
+    EXPECT_EQ(channel->droppedRecordCount(), overflowWriteCount);
 
     LogRecord record{};
     ASSERT_TRUE(channel->records().tryPop(record));

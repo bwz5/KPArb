@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "AllocationCounter.h"
 #include "arbitrage/ArbitrageEngine.h"
 
@@ -10,22 +11,24 @@
 namespace kparb {
 namespace {
 
+using namespace test_constants::hot_path_test;
+using test_constants::fees::kalshiTakerFeeRate;
+
 TEST(HotPathAllocationTest, EngineAppliesUpdatesWithoutAllocating)
 {
-    constexpr std::uint32_t pairCount = 64;
-    auto channel = std::make_unique<LogChannel>(1);
-    ArbitrageEngine engine(pairCount, FeeSchedule::quadratic(0.07), FeeSchedule::zero(), EngineSettings{}, *channel);
+    auto channel = std::make_unique<LogChannel>(static_cast<std::uint16_t>(SourceIdentifier::Engine));
+    ArbitrageEngine engine(pairCount, FeeSchedule::quadratic(kalshiTakerFeeRate), FeeSchedule::zero(), EngineSettings{}, *channel);
     auto queue = std::make_unique<LadderUpdateQueue>();
 
     std::vector<LadderUpdate> updates;
     for (std::uint32_t ladderIndex = 0; ladderIndex < pairCount * laddersPerPair; ++ladderIndex) {
         updates.push_back(LadderUpdate{0, ladderIndex, 0, 0, UpdateKind::ClearLadder, Venue::Kalshi});
     }
-    std::mt19937 generator(7);
+    std::mt19937 generator(randomSeed);
     std::uniform_int_distribution<std::uint32_t> ladderDistribution(0, pairCount * laddersPerPair - 1);
-    std::uniform_int_distribution<int> priceDistribution(300, 700);
-    std::uniform_int_distribution<std::int32_t> quantityDistribution(0, 1000);
-    for (int index = 0; index < 20000; ++index) {
+    std::uniform_int_distribution<int> priceDistribution(lowestRandomAsk, highestRandomAsk);
+    std::uniform_int_distribution<std::int32_t> quantityDistribution(0, largestRandomQuantity);
+    for (int index = 0; index < randomUpdateCount; ++index) {
         updates.push_back(LadderUpdate{index, ladderDistribution(generator), quantityDistribution(generator),
             static_cast<Ticks>(priceDistribution(generator)), UpdateKind::SetLevel, Venue::Polymarket});
     }
@@ -50,9 +53,9 @@ TEST(HotPathAllocationTest, EngineAppliesUpdatesWithoutAllocating)
 
 TEST(HotPathAllocationTest, LogChannelWriteDoesNotAllocate)
 {
-    auto channel = std::make_unique<LogChannel>(1);
+    auto channel = std::make_unique<LogChannel>(static_cast<std::uint16_t>(SourceIdentifier::Engine));
     const testing_support::AllocationScope scope;
-    for (int index = 0; index < 1000; ++index) {
+    for (int index = 0; index < logWriteCount; ++index) {
         EngineStatsRecord stats{};
         stats.updatesApplied = static_cast<std::uint64_t>(index);
         channel->write(stats);

@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "matching/MatchStore.h"
 
 #include <gtest/gtest.h>
@@ -7,6 +8,8 @@
 
 namespace kparb {
 namespace {
+
+using test_constants::matching_test::storedConfidence;
 
 std::filesystem::path temporaryDirectory()
 {
@@ -25,7 +28,7 @@ TEST(MatchStoreTest, VerdictsSurviveSaveAndLoad)
         MatchVerdict verdict;
         verdict.isSameEvent = true;
         verdict.isInverted = true;
-        verdict.confidence = 0.93;
+        verdict.confidence = storedConfidence;
         verdict.reason = "Same event";
         verdict.model = "test-model";
         store.recordVerdict("K1", "P1", verdict);
@@ -37,7 +40,7 @@ TEST(MatchStoreTest, VerdictsSurviveSaveAndLoad)
     ASSERT_TRUE(verdict.has_value());
     EXPECT_TRUE(verdict->isSameEvent);
     EXPECT_TRUE(verdict->isInverted);
-    EXPECT_DOUBLE_EQ(verdict->confidence, 0.93);
+    EXPECT_DOUBLE_EQ(verdict->confidence, storedConfidence);
     EXPECT_EQ(verdict->model, "test-model");
     EXPECT_FALSE(reloaded.findVerdict("K1", "P2").has_value());
     std::filesystem::remove_all(directory);

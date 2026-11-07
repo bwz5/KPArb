@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "arbitrage/ArbitrageEngine.h"
 
 #include <gtest/gtest.h>
@@ -8,6 +9,12 @@
 namespace kparb {
 namespace {
 
+using namespace test_constants::engine_test;
+using namespace test_constants::prices;
+using test_constants::fees::kalshiTakerFeeRate;
+using test_constants::fees::linearFeeExponent;
+using test_constants::fees::politicsTakerFeeRate;
+
 class ArbitrageEngineTest : public ::testing::Test {
 protected:
     void createEngine(std::uint32_t pairCount, EngineSettings settings = {}, FeeSchedule kalshiFees = FeeSchedule::zero(),
@@ -17,12 +24,12 @@ protected:
         engine = std::make_unique<ArbitrageEngine>(pairCount, kalshiFees, polymarketFees, settings, *channel);
     }
 
-    void clearLadder(std::uint32_t pairIndex, LadderSlot slot, std::int64_t time = 1)
+    void clearLadder(std::uint32_t pairIndex, LadderSlot slot, std::int64_t time = defaultUpdateNanos)
     {
         engine->applyUpdate(LadderUpdate{time, ladderIndexFor(pairIndex, slot), 0, 0, UpdateKind::ClearLadder, venueOf(slot)});
     }
 
-    void setLevel(std::uint32_t pairIndex, LadderSlot slot, Ticks price, std::int32_t quantity, std::int64_t time = 1)
+    void setLevel(std::uint32_t pairIndex, LadderSlot slot, Ticks price, std::int32_t quantity, std::int64_t time = defaultUpdateNanos)
     {
         engine->applyUpdate(LadderUpdate{time, ladderIndexFor(pairIndex, slot), quantity, price, UpdateKind::SetLevel, venueOf(slot)});
     }
@@ -59,29 +66,30 @@ protected:
 TEST_F(ArbitrageEngineTest, DetectsKalshiYesPolymarketNoOpportunity)
 {
     createEngine(1);
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::KalshiBuyYes, 450, 1000);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 500, 300);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, discountedKalshiAsk, largeQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fiftyCents, partialQuantity);
 
     const auto opportunities = drainRecords(RecordType::Opportunity);
     ASSERT_EQ(opportunities.size(), 1U);
     const auto opportunity = opportunities[0].loadPayload<OpportunityRecord>();
+    const int expectedEdge = oneDollar - discountedKalshiAsk - fiftyCents;
     EXPECT_EQ(opportunity.direction, TradeDirection::BuyKalshiYesBuyPolymarketNo);
-    EXPECT_EQ(opportunity.kalshiBestPrice, 450);
-    EXPECT_EQ(opportunity.polymarketBestPrice, 500);
-    EXPECT_EQ(opportunity.topEdgeTicks, 50);
-    EXPECT_EQ(opportunity.executableQuantity, 300U);
-    EXPECT_EQ(opportunity.expectedProfitTickQuantity, 50 * 300);
-    EXPECT_TRUE(engine->isOpportunityOpen(0, TradeDirection::BuyKalshiYesBuyPolymarketNo));
-    EXPECT_FALSE(engine->isOpportunityOpen(0, TradeDirection::BuyKalshiNoBuyPolymarketYes));
+    EXPECT_EQ(opportunity.kalshiBestPrice, discountedKalshiAsk);
+    EXPECT_EQ(opportunity.polymarketBestPrice, fiftyCents);
+    EXPECT_EQ(opportunity.topEdgeTicks, expectedEdge);
+    EXPECT_EQ(opportunity.executableQuantity, static_cast<std::uint32_t>(partialQuantity));
+    EXPECT_EQ(opportunity.expectedProfitTickQuantity, expectedEdge * partialQuantity);
+    EXPECT_TRUE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    EXPECT_FALSE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiNoBuyPolymarketYes));
 }
 
 TEST_F(ArbitrageEngineTest, DetectsKalshiNoPolymarketYesOpportunity)
 {
     createEngine(1);
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::PolymarketBuyYes, 300, 100);
-    setLevel(0, LadderSlot::KalshiBuyNo, 650, 100);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::PolymarketBuyYes, underpricedPolymarketYesAsk, standardQuantity);
+    setLevel(firstPair, LadderSlot::KalshiBuyNo, overpricedKalshiNoAsk, standardQuantity);
 
     const auto opportunities = drainRecords(RecordType::Opportunity);
     ASSERT_EQ(opportunities.size(), 1U);
@@ -91,168 +99,178 @@ TEST_F(ArbitrageEngineTest, DetectsKalshiNoPolymarketYesOpportunity)
 TEST_F(ArbitrageEngineTest, NoOpportunityWhenCostReachesOneDollar)
 {
     createEngine(1);
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::KalshiBuyYes, 500, 100);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 500, 100);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, fiftyCents, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fiftyCents, standardQuantity);
     EXPECT_TRUE(drainRecords(RecordType::Opportunity).empty());
 }
 
 TEST_F(ArbitrageEngineTest, FeesCanEliminateEdge)
 {
-    createEngine(1, EngineSettings{}, FeeSchedule::quadratic(0.07));
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::KalshiBuyYes, 490, 100);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 500, 100);
+    const FeeSchedule kalshiFees = FeeSchedule::quadratic(kalshiTakerFeeRate);
+    createEngine(1, EngineSettings{}, kalshiFees);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, feeTestKalshiAsk, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fiftyCents, standardQuantity);
     EXPECT_TRUE(drainRecords(RecordType::Opportunity).empty());
 
-    setLevel(0, LadderSlot::PolymarketBuyNo, 470, 100);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, feeTestPolymarketAsk, standardQuantity);
     const auto opportunities = drainRecords(RecordType::Opportunity);
     ASSERT_EQ(opportunities.size(), 1U);
-    EXPECT_EQ(opportunities[0].loadPayload<OpportunityRecord>().topEdgeTicks, 1000 - 490 - 470 - 18);
+    EXPECT_EQ(opportunities[0].loadPayload<OpportunityRecord>().topEdgeTicks,
+        oneDollar - feeTestKalshiAsk - feeTestPolymarketAsk - kalshiFees.feeAt(feeTestKalshiAsk));
 }
 
 TEST_F(ArbitrageEngineTest, PerPairPolymarketFeesApply)
 {
-    createEngine(2);
-    ASSERT_TRUE(engine->assignPolymarketFeeSchedule(1, FeeSchedule::curve(0.04, 1.0)));
-    synchronizeAll(0);
-    synchronizeAll(1);
-    setLevel(0, LadderSlot::KalshiBuyYes, 495, 100);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 500, 100);
-    setLevel(1, LadderSlot::KalshiBuyYes, 495, 100);
-    setLevel(1, LadderSlot::PolymarketBuyNo, 500, 100);
-    EXPECT_TRUE(engine->isOpportunityOpen(0, TradeDirection::BuyKalshiYesBuyPolymarketNo));
-    EXPECT_FALSE(engine->isOpportunityOpen(1, TradeDirection::BuyKalshiYesBuyPolymarketNo));
-    EXPECT_FALSE(engine->assignPolymarketFeeSchedule(5, FeeSchedule::zero()));
+    createEngine(twoPairs);
+    ASSERT_TRUE(engine->assignPolymarketFeeSchedule(secondPair, FeeSchedule::curve(politicsTakerFeeRate, linearFeeExponent)));
+    synchronizeAll(firstPair);
+    synchronizeAll(secondPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, slightlyCheapKalshiAsk, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fiftyCents, standardQuantity);
+    setLevel(secondPair, LadderSlot::KalshiBuyYes, slightlyCheapKalshiAsk, standardQuantity);
+    setLevel(secondPair, LadderSlot::PolymarketBuyNo, fiftyCents, standardQuantity);
+    EXPECT_TRUE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    EXPECT_FALSE(engine->isOpportunityOpen(secondPair, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    EXPECT_FALSE(engine->assignPolymarketFeeSchedule(pairOutsideEngine, FeeSchedule::zero()));
 }
 
 TEST_F(ArbitrageEngineTest, UnsynchronizedLaddersIgnoreLevels)
 {
     createEngine(1);
-    setLevel(0, LadderSlot::KalshiBuyYes, 100, 100);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 100, 100);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, unsynchronizedAsk, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, unsynchronizedAsk, standardQuantity);
     EXPECT_TRUE(drainRecords(RecordType::Opportunity).empty());
-    EXPECT_EQ(engine->ladder(ladderIndexFor(0, LadderSlot::KalshiBuyYes)).occupiedLevelCount(), 0U);
+    EXPECT_EQ(engine->ladder(ladderIndexFor(firstPair, LadderSlot::KalshiBuyYes)).occupiedLevelCount(), 0U);
 }
 
 TEST_F(ArbitrageEngineTest, VenueResetClosesOpportunityAndRequiresNewSnapshot)
 {
     createEngine(1);
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::KalshiBuyYes, 400, 100);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 400, 100);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, fortyCents, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fortyCents, standardQuantity);
     ASSERT_EQ(drainRecords(RecordType::Opportunity).size(), 1U);
 
-    engine->applyUpdate(LadderUpdate{5, 0, 0, 0, UpdateKind::ResetVenue, Venue::Kalshi});
-    EXPECT_FALSE(engine->isOpportunityOpen(0, TradeDirection::BuyKalshiYesBuyPolymarketNo));
-    EXPECT_EQ(engine->counters().synchronizedLadderCount, 2U);
+    engine->applyUpdate(LadderUpdate{venueResetNanos, 0, 0, 0, UpdateKind::ResetVenue, Venue::Kalshi});
+    EXPECT_FALSE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    EXPECT_EQ(engine->counters().synchronizedLadderCount, laddersPerPair - kalshiLaddersPerPair);
 
-    setLevel(0, LadderSlot::KalshiBuyYes, 400, 100);
-    EXPECT_FALSE(engine->isOpportunityOpen(0, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, fortyCents, standardQuantity);
+    EXPECT_FALSE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiYesBuyPolymarketNo));
 
-    clearLadder(0, LadderSlot::KalshiBuyYes);
-    setLevel(0, LadderSlot::KalshiBuyYes, 400, 100);
-    EXPECT_TRUE(engine->isOpportunityOpen(0, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    clearLadder(firstPair, LadderSlot::KalshiBuyYes);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, fortyCents, standardQuantity);
+    EXPECT_TRUE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiYesBuyPolymarketNo));
 }
 
 TEST_F(ArbitrageEngineTest, StaleQuotesAreSuppressed)
 {
     EngineSettings settings;
-    settings.maximumQuoteAgeNanos = 1000;
+    settings.maximumQuoteAgeNanos = maximumQuoteAgeNanos;
     createEngine(1, settings);
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 400, 100, 10);
-    setLevel(0, LadderSlot::KalshiBuyYes, 400, 100, 5000);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fortyCents, standardQuantity, earlyQuoteNanos);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, fortyCents, standardQuantity, lateQuoteNanos);
     EXPECT_TRUE(drainRecords(RecordType::Opportunity).empty());
 
-    setLevel(0, LadderSlot::PolymarketBuyNo, 400, 100, 5100);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fortyCents, standardQuantity, refreshedQuoteNanos);
     EXPECT_EQ(drainRecords(RecordType::Opportunity).size(), 1U);
 }
 
 TEST_F(ArbitrageEngineTest, DepthWalkStopsWhereEdgeRunsOut)
 {
     EngineSettings settings;
-    settings.minimumEdgeTicks = 10;
+    settings.minimumEdgeTicks = depthMinimumEdgeTicks;
     createEngine(1, settings);
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::KalshiBuyYes, 400, 100);
-    setLevel(0, LadderSlot::KalshiBuyYes, 420, 200);
-    setLevel(0, LadderSlot::KalshiBuyYes, 480, 500);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 500, 150);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 530, 1000);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, depthKalshiFirstAsk, depthKalshiFirstQuantity);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, depthKalshiSecondAsk, depthKalshiSecondQuantity);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, depthKalshiThirdAsk, depthKalshiThirdQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, depthPolymarketFirstAsk, depthPolymarketFirstQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, depthPolymarketSecondAsk, depthPolymarketSecondQuantity);
     drainRecords(RecordType::Opportunity);
 
-    setLevel(0, LadderSlot::PolymarketBuyNo, 500, 160);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, depthPolymarketFirstAsk, depthPolymarketFirstRefreshedQuantity);
     EXPECT_TRUE(drainRecords(RecordType::Opportunity).empty());
 
-    setLevel(0, LadderSlot::KalshiBuyYes, 420, 250);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, depthKalshiSecondAsk, depthKalshiSecondRefreshedQuantity);
     const auto opportunities = drainRecords(RecordType::Opportunity);
     ASSERT_EQ(opportunities.size(), 1U);
     const auto opportunity = opportunities[0].loadPayload<OpportunityRecord>();
-    EXPECT_EQ(opportunity.executableQuantity, 100U + 60U + 190U);
-    EXPECT_EQ(opportunity.expectedProfitTickQuantity, 100 * 100 + 60 * 80 + 190 * 50);
-    EXPECT_EQ(opportunity.kalshiWorstPrice, 420);
-    EXPECT_EQ(opportunity.polymarketWorstPrice, 530);
-    EXPECT_EQ(opportunity.levelsConsumed, 3);
+    const std::int32_t firstFill = depthKalshiFirstQuantity;
+    const std::int32_t secondFill = depthPolymarketFirstRefreshedQuantity - firstFill;
+    const std::int32_t thirdFill = depthKalshiSecondRefreshedQuantity - secondFill;
+    const int firstEdge = oneDollar - depthKalshiFirstAsk - depthPolymarketFirstAsk;
+    const int secondEdge = oneDollar - depthKalshiSecondAsk - depthPolymarketFirstAsk;
+    const int thirdEdge = oneDollar - depthKalshiSecondAsk - depthPolymarketSecondAsk;
+    EXPECT_EQ(opportunity.executableQuantity, static_cast<std::uint32_t>(firstFill + secondFill + thirdFill));
+    EXPECT_EQ(opportunity.expectedProfitTickQuantity, firstFill * firstEdge + secondFill * secondEdge + thirdFill * thirdEdge);
+    EXPECT_EQ(opportunity.kalshiWorstPrice, depthKalshiSecondAsk);
+    EXPECT_EQ(opportunity.polymarketWorstPrice, depthPolymarketSecondAsk);
+    EXPECT_EQ(opportunity.levelsConsumed, depthLevelsConsumed);
 }
 
 TEST_F(ArbitrageEngineTest, RepeatedIdenticalStateIsNotReEmitted)
 {
     createEngine(1);
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::KalshiBuyYes, 400, 100);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 400, 100);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 900, 5);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 900, 7);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, fortyCents, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fortyCents, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, expensiveAsk, smallQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, expensiveAsk, otherSmallQuantity);
     EXPECT_EQ(drainRecords(RecordType::Opportunity).size(), 1U);
 
-    setLevel(0, LadderSlot::PolymarketBuyNo, 400, 50);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fortyCents, refreshedQuantity);
     EXPECT_EQ(drainRecords(RecordType::Opportunity).size(), 1U);
 }
 
 TEST_F(ArbitrageEngineTest, ClosingEmitsClosedRecord)
 {
     createEngine(1);
-    synchronizeAll(0);
-    setLevel(0, LadderSlot::KalshiBuyYes, 400, 100, 10);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 400, 100, 20);
-    setLevel(0, LadderSlot::PolymarketBuyNo, 400, 0, 70);
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, fortyCents, standardQuantity, kalshiQuoteNanos);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fortyCents, standardQuantity, openedNanos);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fortyCents, removedQuantity, closedNanos);
 
     const auto closed = drainRecords(RecordType::OpportunityClosed);
     ASSERT_EQ(closed.size(), 1U);
-    EXPECT_EQ(closed[0].loadPayload<OpportunityClosedRecord>().openDurationNanos, 50);
+    EXPECT_EQ(closed[0].loadPayload<OpportunityClosedRecord>().openDurationNanos, closedNanos - openedNanos);
     EXPECT_EQ(engine->counters().openOpportunityCount, 0U);
     EXPECT_EQ(engine->counters().opportunitiesOpened, 1U);
 }
 
 TEST_F(ArbitrageEngineTest, PairsAreIndependent)
 {
-    createEngine(3);
-    synchronizeAll(1);
-    synchronizeAll(2);
-    setLevel(1, LadderSlot::KalshiBuyYes, 400, 100);
-    setLevel(2, LadderSlot::PolymarketBuyNo, 400, 100);
+    createEngine(threePairs);
+    synchronizeAll(secondPair);
+    synchronizeAll(thirdPair);
+    setLevel(secondPair, LadderSlot::KalshiBuyYes, fortyCents, standardQuantity);
+    setLevel(thirdPair, LadderSlot::PolymarketBuyNo, fortyCents, standardQuantity);
     EXPECT_TRUE(drainRecords(RecordType::Opportunity).empty());
 }
 
 TEST_F(ArbitrageEngineTest, DrainQueueAppliesBatchedUpdates)
 {
-    createEngine(2);
+    createEngine(twoPairs);
     auto queue = std::make_unique<LadderUpdateQueue>();
-    for (std::uint32_t pairIndex = 0; pairIndex < 2; ++pairIndex) {
+    for (std::uint32_t pairIndex = 0; pairIndex < twoPairs; ++pairIndex) {
         for (std::uint32_t slot = 0; slot < laddersPerPair; ++slot) {
-            ASSERT_TRUE(queue->tryPush(LadderUpdate{1, pairIndex * laddersPerPair + slot, 0, 0, UpdateKind::ClearLadder, Venue::Kalshi}));
+            ASSERT_TRUE(queue->tryPush(LadderUpdate{firstQueuedNanos, pairIndex * laddersPerPair + slot, 0, 0, UpdateKind::ClearLadder, Venue::Kalshi}));
         }
     }
-    ASSERT_TRUE(queue->tryPush(LadderUpdate{2, ladderIndexFor(1, LadderSlot::KalshiBuyNo), 100, 300, UpdateKind::SetLevel, Venue::Kalshi}));
-    ASSERT_TRUE(queue->tryPush(LadderUpdate{3, ladderIndexFor(1, LadderSlot::PolymarketBuyYes), 100, 300, UpdateKind::SetLevel, Venue::Polymarket}));
+    ASSERT_TRUE(queue->tryPush(LadderUpdate{secondQueuedNanos, ladderIndexFor(secondPair, LadderSlot::KalshiBuyNo), standardQuantity, queuedAsk,
+        UpdateKind::SetLevel, Venue::Kalshi}));
+    ASSERT_TRUE(queue->tryPush(LadderUpdate{thirdQueuedNanos, ladderIndexFor(secondPair, LadderSlot::PolymarketBuyYes), standardQuantity, queuedAsk,
+        UpdateKind::SetLevel, Venue::Polymarket}));
 
     std::size_t total = 0;
     while (const std::size_t drained = engine->drainQueue<true>(*queue)) {
         total += drained;
     }
-    EXPECT_EQ(total, 10U);
-    EXPECT_TRUE(engine->isOpportunityOpen(1, TradeDirection::BuyKalshiNoBuyPolymarketYes));
+    EXPECT_EQ(total, twoPairs * laddersPerPair + queuedLevelUpdates);
+    EXPECT_TRUE(engine->isOpportunityOpen(secondPair, TradeDirection::BuyKalshiNoBuyPolymarketYes));
 }
 
 }

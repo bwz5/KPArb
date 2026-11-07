@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "common/SpscQueue.h"
 
 #include <gtest/gtest.h>
@@ -10,9 +11,11 @@
 namespace kparb {
 namespace {
 
+using namespace test_constants::queue_test;
+
 TEST(SpscQueueTest, StartsEmpty)
 {
-    SpscQueue<int, 8> queue;
+    SpscQueue<int, smallCapacity> queue;
     int value = 0;
     EXPECT_TRUE(queue.isEmpty());
     EXPECT_FALSE(queue.tryPop(value));
@@ -20,12 +23,12 @@ TEST(SpscQueueTest, StartsEmpty)
 
 TEST(SpscQueueTest, PreservesOrder)
 {
-    SpscQueue<int, 8> queue;
-    for (int value = 0; value < 5; ++value) {
+    SpscQueue<int, smallCapacity> queue;
+    for (int value = 0; value < orderedElementCount; ++value) {
         ASSERT_TRUE(queue.tryPush(value));
     }
-    for (int expected = 0; expected < 5; ++expected) {
-        int value = -1;
+    for (int expected = 0; expected < orderedElementCount; ++expected) {
+        int value = emptySentinel;
         ASSERT_TRUE(queue.tryPop(value));
         EXPECT_EQ(value, expected);
     }
@@ -33,20 +36,20 @@ TEST(SpscQueueTest, PreservesOrder)
 
 TEST(SpscQueueTest, RejectsPushWhenFull)
 {
-    SpscQueue<int, 4> queue;
-    for (int value = 0; value < 4; ++value) {
+    SpscQueue<int, tinyCapacity> queue;
+    for (int value = 0; value < static_cast<int>(tinyCapacity); ++value) {
         ASSERT_TRUE(queue.tryPush(value));
     }
-    EXPECT_FALSE(queue.tryPush(99));
+    EXPECT_FALSE(queue.tryPush(rejectedValue));
     int value = 0;
     ASSERT_TRUE(queue.tryPop(value));
-    EXPECT_TRUE(queue.tryPush(99));
+    EXPECT_TRUE(queue.tryPush(rejectedValue));
 }
 
 TEST(SpscQueueTest, WrapsAroundManyTimes)
 {
-    SpscQueue<std::uint64_t, 4> queue;
-    for (std::uint64_t value = 0; value < 1000; ++value) {
+    SpscQueue<std::uint64_t, tinyCapacity> queue;
+    for (std::uint64_t value = 0; value < wraparoundIterations; ++value) {
         ASSERT_TRUE(queue.tryPush(value));
         std::uint64_t popped = 0;
         ASSERT_TRUE(queue.tryPop(popped));
@@ -56,24 +59,25 @@ TEST(SpscQueueTest, WrapsAroundManyTimes)
 
 TEST(SpscQueueTest, BatchPopReturnsAvailableElements)
 {
-    SpscQueue<int, 16> queue;
-    for (int value = 0; value < 10; ++value) {
+    SpscQueue<int, batchCapacity> queue;
+    for (int value = 0; value < batchFillCount; ++value) {
         ASSERT_TRUE(queue.tryPush(value));
     }
-    std::array<int, 4> batch{};
-    EXPECT_EQ(queue.tryPopBatch(batch.data(), batch.size()), 4U);
-    EXPECT_EQ(batch[0], 0);
-    EXPECT_EQ(batch[3], 3);
-    std::array<int, 16> rest{};
-    EXPECT_EQ(queue.tryPopBatch(rest.data(), rest.size()), 6U);
-    EXPECT_EQ(rest[5], 9);
+    std::array<int, firstBatchSize> batch{};
+    EXPECT_EQ(queue.tryPopBatch(batch.data(), batch.size()), firstBatchSize);
+    EXPECT_EQ(batch.front(), 0);
+    EXPECT_EQ(batch.back(), static_cast<int>(firstBatchSize) - 1);
+    std::array<int, batchCapacity> rest{};
+    const std::size_t remaining = static_cast<std::size_t>(batchFillCount) - firstBatchSize;
+    EXPECT_EQ(queue.tryPopBatch(rest.data(), rest.size()), remaining);
+    EXPECT_EQ(rest[remaining - 1], batchFillCount - 1);
     EXPECT_EQ(queue.tryPopBatch(rest.data(), rest.size()), 0U);
 }
 
 TEST(SpscQueueTest, TwoThreadStressKeepsOrderWithoutLoss)
 {
-    constexpr std::uint64_t itemCount = 10'000'000;
-    auto queue = std::make_unique<SpscQueue<std::uint64_t, 1024>>();
+    constexpr std::uint64_t itemCount = stressItemCount;
+    auto queue = std::make_unique<SpscQueue<std::uint64_t, stressCapacity>>();
 
     std::thread producer([&queue] {
         for (std::uint64_t value = 0; value < itemCount;) {
@@ -84,7 +88,7 @@ TEST(SpscQueueTest, TwoThreadStressKeepsOrderWithoutLoss)
     });
 
     std::uint64_t expected = 0;
-    std::array<std::uint64_t, 64> batch{};
+    std::array<std::uint64_t, stressBatchSize> batch{};
     bool isOrdered = true;
     while (expected < itemCount) {
         const std::size_t count = queue->tryPopBatch(batch.data(), batch.size());

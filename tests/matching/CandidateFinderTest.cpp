@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "ingestion/MarketClassification.h"
 #include "matching/CandidateFinder.h"
 
@@ -5,6 +6,9 @@
 
 namespace kparb {
 namespace {
+
+using namespace test_constants::matching_test;
+using test_constants::time_units::secondsPerHour;
 
 MarketInfo market(Venue venue, std::string identifier, std::string title, std::int64_t closeTime, std::string subtitle = "")
 {
@@ -20,19 +24,19 @@ MarketInfo market(Venue venue, std::string identifier, std::string title, std::i
 class CandidateFinderTest : public ::testing::Test {
 protected:
     std::vector<MarketInfo> polymarket{
-        market(Venue::Polymarket, "p-fed", "Will the Fed cut rates in December 2026?", 1'000'000),
-        market(Venue::Polymarket, "p-btc-100", "Will Bitcoin be above $100,000 on December 31?", 1'000'000),
-        market(Venue::Polymarket, "p-btc-120", "Will Bitcoin be above $120,000 on December 31?", 1'000'000),
-        market(Venue::Polymarket, "p-late", "Will the Fed cut rates in March 2027?", 9'000'000),
-        market(Venue::Polymarket, "p-other", "Who will win the Super Bowl?", 1'000'000),
+        market(Venue::Polymarket, "p-fed", "Will the Fed cut rates in December 2026?", standardCloseSeconds),
+        market(Venue::Polymarket, "p-btc-100", "Will Bitcoin be above $100,000 on December 31?", standardCloseSeconds),
+        market(Venue::Polymarket, "p-btc-120", "Will Bitcoin be above $120,000 on December 31?", standardCloseSeconds),
+        market(Venue::Polymarket, "p-late", "Will the Fed cut rates in March 2027?", distantCloseSeconds),
+        market(Venue::Polymarket, "p-other", "Who will win the Super Bowl?", standardCloseSeconds),
     };
 };
 
 TEST_F(CandidateFinderTest, FindsSimilarMarketsWithinDateWindow)
 {
-    const std::vector<MarketInfo> kalshi{market(Venue::Kalshi, "k-fed", "Fed decision in December 2026?", 1'100'000, "Cut rates")};
+    const std::vector<MarketInfo> kalshi{market(Venue::Kalshi, "k-fed", "Fed decision in December 2026?", nearbyCloseSeconds, "Cut rates")};
     CandidateSettings settings;
-    settings.minimumSimilarity = 0.3;
+    settings.minimumSimilarity = strictSimilarity;
     const CandidateFinder finder(polymarket, settings);
     const auto candidates = finder.findCandidates(kalshi);
     ASSERT_FALSE(candidates.empty());
@@ -44,9 +48,9 @@ TEST_F(CandidateFinderTest, FindsSimilarMarketsWithinDateWindow)
 
 TEST_F(CandidateFinderTest, RejectsMismatchedNumericThresholds)
 {
-    const std::vector<MarketInfo> kalshi{market(Venue::Kalshi, "k-btc", "Bitcoin above $100,000 on Dec 31, 2026?", 1'000'000)};
+    const std::vector<MarketInfo> kalshi{market(Venue::Kalshi, "k-btc", "Bitcoin above $100,000 on Dec 31, 2026?", standardCloseSeconds)};
     CandidateSettings settings;
-    settings.minimumSimilarity = 0.2;
+    settings.minimumSimilarity = moderateSimilarity;
     const CandidateFinder finder(polymarket, settings);
     const auto candidates = finder.findCandidates(kalshi);
     ASSERT_FALSE(candidates.empty());
@@ -59,23 +63,23 @@ TEST_F(CandidateFinderTest, RejectsMismatchedNumericThresholds)
 TEST_F(CandidateFinderTest, RespectsCandidateLimitAndSortsGlobally)
 {
     const std::vector<MarketInfo> kalshi{
-        market(Venue::Kalshi, "k-other", "Super Bowl halftime show performer?", 1'000'000),
-        market(Venue::Kalshi, "k-fed", "Will the Fed cut rates in December 2026?", 1'000'000),
+        market(Venue::Kalshi, "k-other", "Super Bowl halftime show performer?", standardCloseSeconds),
+        market(Venue::Kalshi, "k-fed", "Will the Fed cut rates in December 2026?", standardCloseSeconds),
     };
     CandidateSettings settings;
-    settings.minimumSimilarity = 0.1;
-    settings.candidatesPerMarket = 1;
+    settings.minimumSimilarity = looseSimilarity;
+    settings.candidatesPerMarket = singleCandidatePerMarket;
     const CandidateFinder finder(polymarket, settings);
     const auto candidates = finder.findCandidates(kalshi);
-    ASSERT_EQ(candidates.size(), 2U);
+    ASSERT_EQ(candidates.size(), twoCandidates);
     EXPECT_GE(candidates[0].score, candidates[1].score);
     EXPECT_EQ(kalshi[candidates[0].kalshiIndex].identifier, "k-fed");
-    EXPECT_NEAR(candidates[0].score, 1.0, 1e-9);
+    EXPECT_NEAR(candidates[0].score, perfectScore, scoreTolerance);
 }
 
 MarketInfo sportsMarket(Venue venue, std::string identifier, std::string title, std::string marketType, double strike = 0.0, bool hasStrike = false)
 {
-    MarketInfo info = market(venue, std::move(identifier), std::move(title), 1'000'000);
+    MarketInfo info = market(venue, std::move(identifier), std::move(title), standardCloseSeconds);
     info.marketType = std::move(marketType);
     info.strike = strike;
     info.hasStrike = hasStrike;
@@ -117,13 +121,13 @@ TEST(MarketClassificationTest, ClassifiesPolymarketSportsTypes)
 TEST(CandidateFilterTest, GameWinnerPairsWithMoneylineInsteadOfSpread)
 {
     const std::vector<MarketInfo> polymarketMarkets{
-        sportsMarket(Venue::Polymarket, "p-spread", "Spread: Turk Telekom (-7.5) Fraport Skyliners vs. Turk Telekom", "spread", 7.5, true),
+        sportsMarket(Venue::Polymarket, "p-spread", "Spread: Turk Telekom (-7.5) Fraport Skyliners vs. Turk Telekom", "spread", telekomSpreadLine, true),
         sportsMarket(Venue::Polymarket, "p-moneyline", "Fraport Skyliners vs. Turk Telekom", "winner"),
     };
     MarketInfo kalshiMarket = sportsMarket(Venue::Kalshi, "k-game", "Turk Telekom wins", "winner");
     kalshiMarket.rulesSummary = "If Turk Telekom wins the Fraport Skyliners vs Turk Telekom EuroCup basketball game, then the market resolves to Yes.";
     CandidateSettings settings;
-    settings.minimumSimilarity = 0.1;
+    settings.minimumSimilarity = looseSimilarity;
     const CandidateFinder finder(polymarketMarkets, settings);
     const auto candidates = finder.findCandidates({kalshiMarket});
     ASSERT_EQ(candidates.size(), 1U);
@@ -133,12 +137,12 @@ TEST(CandidateFilterTest, GameWinnerPairsWithMoneylineInsteadOfSpread)
 TEST(CandidateFilterTest, StructuredStrikesMustMatch)
 {
     const std::vector<MarketInfo> polymarketMarkets{
-        sportsMarket(Venue::Polymarket, "p-total-2205", "Hawks vs. Wizards: O/U 220.5", "total", 220.5, true),
-        sportsMarket(Venue::Polymarket, "p-total-2255", "Hawks vs. Wizards: O/U 225.5", "total", 225.5, true),
+        sportsMarket(Venue::Polymarket, "p-total-2205", "Hawks vs. Wizards: O/U 220.5", "total", lowerTotalLine, true),
+        sportsMarket(Venue::Polymarket, "p-total-2255", "Hawks vs. Wizards: O/U 225.5", "total", higherTotalLine, true),
     };
-    const MarketInfo kalshiMarket = sportsMarket(Venue::Kalshi, "k-total", "Hawks vs. Wizards: Over 225.5 points", "total", 225.5, true);
+    const MarketInfo kalshiMarket = sportsMarket(Venue::Kalshi, "k-total", "Hawks vs. Wizards: Over 225.5 points", "total", higherTotalLine, true);
     CandidateSettings settings;
-    settings.minimumSimilarity = 0.1;
+    settings.minimumSimilarity = looseSimilarity;
     settings.requireCompatibleNumbers = false;
     const CandidateFinder finder(polymarketMarkets, settings);
     const auto candidates = finder.findCandidates({kalshiMarket});
@@ -148,20 +152,20 @@ TEST(CandidateFilterTest, StructuredStrikesMustMatch)
 
 TEST(CandidateFilterTest, EachPolymarketMarketKeepsOnlyTheClosestKalshiMarkets)
 {
-    const std::vector<MarketInfo> polymarketMarkets{market(Venue::Polymarket, "p-btc", "Bitcoin above $72,000 on November 4?", 1'000'000)};
+    const std::vector<MarketInfo> polymarketMarkets{market(Venue::Polymarket, "p-btc", "Bitcoin above $72,000 on November 4?", standardCloseSeconds)};
     std::vector<MarketInfo> kalshiMarkets;
-    for (int hour = 0; hour < 6; ++hour) {
+    for (int hour = 0; hour < hourlyBitcoinMarketCount; ++hour) {
         kalshiMarkets.push_back(market(Venue::Kalshi, "k-btc-" + std::to_string(hour), "Bitcoin above $72,000 on November 4?",
-            1'000'000 + (hour - 2) * 3600));
+            standardCloseSeconds + (hour - closestBitcoinMarketHour) * secondsPerHour));
     }
     CandidateSettings settings;
-    settings.minimumSimilarity = 0.1;
-    settings.candidatesPerPolymarketMarket = 2;
+    settings.minimumSimilarity = looseSimilarity;
+    settings.candidatesPerPolymarketMarket = twoCandidatesPerPolymarketMarket;
     const CandidateFinder finder(polymarketMarkets, settings);
     const auto candidates = finder.findCandidates(kalshiMarkets);
-    ASSERT_EQ(candidates.size(), 2U);
-    EXPECT_EQ(kalshiMarkets[candidates[0].kalshiIndex].identifier, "k-btc-2");
-    EXPECT_EQ(candidates[1].closeTimeDifferenceSeconds, 3600);
+    ASSERT_EQ(candidates.size(), twoCandidates);
+    EXPECT_EQ(kalshiMarkets[candidates[0].kalshiIndex].identifier, "k-btc-" + std::to_string(closestBitcoinMarketHour));
+    EXPECT_EQ(candidates[1].closeTimeDifferenceSeconds, secondsPerHour);
 }
 
 TEST(CandidateFilterTest, SharedTeamsBridgeCityAndNicknameAndRejectOtherGames)
@@ -180,7 +184,7 @@ TEST(CandidateFilterTest, SharedTeamsBridgeCityAndNicknameAndRejectOtherGames)
     const auto candidates = finder.findCandidates({kalshiMarket});
     ASSERT_EQ(candidates.size(), 1U);
     EXPECT_EQ(polymarketMarkets[candidates[0].polymarketIndex].identifier, "p-cgy-sea");
-    EXPECT_GE(candidates[0].score, 2 * settings.sharedTeamBonus);
+    EXPECT_GE(candidates[0].score, sharedTeamsPerGame * settings.sharedTeamBonus);
 }
 
 TEST(CandidateFilterTest, MarketsInEntityScopeMustNameTheSameEntity)
@@ -198,24 +202,24 @@ TEST(CandidateFilterTest, MarketsInEntityScopeMustNameTheSameEntity)
     MarketInfo kalshiMen = kalshiWomen;
     kalshiMen.entityLeague = "sea";
     kalshiMen.teamKeys = {"sea:INT", "sea:NAP"};
-    EXPECT_FALSE(areEntitiesCompatible(kalshiWomen, polymarketMen, 0));
-    EXPECT_TRUE(areEntitiesCompatible(kalshiMen, polymarketMen, 2));
-    EXPECT_TRUE(areEntitiesCompatible(kalshiProp, polymarketProp, 0));
-    EXPECT_TRUE(areEntitiesCompatible(kalshiMen, polymarketTennis, 0));
+    EXPECT_FALSE(areEntitiesCompatible(kalshiWomen, polymarketMen, noSharedEntities));
+    EXPECT_TRUE(areEntitiesCompatible(kalshiMen, polymarketMen, bothEntitiesShared));
+    EXPECT_TRUE(areEntitiesCompatible(kalshiProp, polymarketProp, noSharedEntities));
+    EXPECT_TRUE(areEntitiesCompatible(kalshiMen, polymarketTennis, noSharedEntities));
     polymarketTennis.teamKeys = {"atp:SIN"};
-    EXPECT_FALSE(areEntitiesCompatible(kalshiMen, polymarketTennis, 0));
+    EXPECT_FALSE(areEntitiesCompatible(kalshiMen, polymarketTennis, noSharedEntities));
 }
 
 TEST(CandidateFilterTest, PolymarketLinesNeedAKalshiStrike)
 {
-    MarketInfo kalshiLeader = market(Venue::Kalshi, "k-leader", "Austin Reaves: Points leader", 1'000'000);
-    MarketInfo kalshiThreshold = market(Venue::Kalshi, "k-10", "Austin Reaves: 10+ points", 1'000'000);
-    kalshiThreshold.strike = 9.5;
+    MarketInfo kalshiLeader = market(Venue::Kalshi, "k-leader", "Austin Reaves: Points leader", standardCloseSeconds);
+    MarketInfo kalshiThreshold = market(Venue::Kalshi, "k-10", "Austin Reaves: 10+ points", standardCloseSeconds);
+    kalshiThreshold.strike = pointsPropLine;
     kalshiThreshold.hasStrike = true;
-    MarketInfo polymarketLine = market(Venue::Polymarket, "p-line", "Austin Reaves: Points O/U 9.5", 1'000'000);
-    polymarketLine.strike = 9.5;
+    MarketInfo polymarketLine = market(Venue::Polymarket, "p-line", "Austin Reaves: Points O/U 9.5", standardCloseSeconds);
+    polymarketLine.strike = pointsPropLine;
     polymarketLine.hasStrike = true;
-    const MarketInfo polymarketRain = market(Venue::Polymarket, "p-rain", "Will it rain in Washington, DC?", 1'000'000);
+    const MarketInfo polymarketRain = market(Venue::Polymarket, "p-rain", "Will it rain in Washington, DC?", standardCloseSeconds);
     EXPECT_FALSE(areStrikesCompatible(kalshiLeader, polymarketLine));
     EXPECT_TRUE(areStrikesCompatible(kalshiThreshold, polymarketLine));
     EXPECT_TRUE(areStrikesCompatible(kalshiThreshold, polymarketRain));
@@ -223,13 +227,13 @@ TEST(CandidateFilterTest, PolymarketLinesNeedAKalshiStrike)
 
 TEST(CandidateFilterTest, SpreadSubjectTeamsMustAgree)
 {
-    MarketInfo kalshiSpread = market(Venue::Kalshi, "k-chi", "Chicago wins by over 2.5 goals", 1'000'000);
+    MarketInfo kalshiSpread = market(Venue::Kalshi, "k-chi", "Chicago wins by over 2.5 goals", standardCloseSeconds);
     kalshiSpread.subjectTeamKey = "nhl:CHI";
-    MarketInfo panthersSpread = market(Venue::Polymarket, "p-fla", "Spread: Panthers (-2.5)", 1'000'000);
+    MarketInfo panthersSpread = market(Venue::Polymarket, "p-fla", "Spread: Panthers (-2.5)", standardCloseSeconds);
     panthersSpread.subjectTeamKey = "nhl:FLA";
-    MarketInfo blackhawksSpread = market(Venue::Polymarket, "p-chi", "Spread: Blackhawks (-2.5)", 1'000'000);
+    MarketInfo blackhawksSpread = market(Venue::Polymarket, "p-chi", "Spread: Blackhawks (-2.5)", standardCloseSeconds);
     blackhawksSpread.subjectTeamKey = "nhl:CHI";
-    const MarketInfo moneyline = market(Venue::Polymarket, "p-ml", "Blackhawks vs. Panthers", 1'000'000);
+    const MarketInfo moneyline = market(Venue::Polymarket, "p-ml", "Blackhawks vs. Panthers", standardCloseSeconds);
     EXPECT_FALSE(areSubjectTeamsCompatible(kalshiSpread, panthersSpread));
     EXPECT_TRUE(areSubjectTeamsCompatible(kalshiSpread, blackhawksSpread));
     EXPECT_TRUE(areSubjectTeamsCompatible(kalshiSpread, moneyline));

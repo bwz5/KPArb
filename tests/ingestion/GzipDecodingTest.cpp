@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "ingestion/GzipDecoding.h"
 
 #include <gtest/gtest.h>
@@ -8,11 +9,13 @@
 namespace kparb {
 namespace {
 
+using namespace test_constants::gzip_test;
+
 std::string compressGzip(const std::string& plain)
 {
     z_stream stream{};
-    deflateInit2(&stream, Z_BEST_SPEED, Z_DEFLATED, 16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY);
-    std::string output(deflateBound(&stream, static_cast<uLong>(plain.size())) + 32, '\0');
+    deflateInit2(&stream, Z_BEST_SPEED, Z_DEFLATED, gzipHeaderWindowBitsOffset + MAX_WBITS, deflateMemoryLevel, Z_DEFAULT_STRATEGY);
+    std::string output(deflateBound(&stream, static_cast<uLong>(plain.size())) + outputSlackBytes, '\0');
     stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(plain.data()));
     stream.avail_in = static_cast<uInt>(plain.size());
     stream.next_out = reinterpret_cast<Bytef*>(output.data());
@@ -26,7 +29,7 @@ std::string compressGzip(const std::string& plain)
 TEST(GzipDecodingTest, RecognizesAndInflatesGzipBodies)
 {
     std::string plain = "{\"markets\":[";
-    for (int index = 0; index < 20000; ++index) {
+    for (int index = 0; index < repeatedTickerCount; ++index) {
         plain += "{\"ticker\":\"KXNHLGAME-26NOV04CGYSEA-CGY\"},";
     }
     plain += "{}]}";
@@ -40,8 +43,8 @@ TEST(GzipDecodingTest, RecognizesAndInflatesGzipBodies)
 
 TEST(GzipDecodingTest, TruncatedInputFails)
 {
-    const std::string compressed = compressGzip(std::string(100000, 'k'));
-    EXPECT_FALSE(decompressGzip(compressed.substr(0, compressed.size() / 2)).has_value());
+    const std::string compressed = compressGzip(std::string(repeatedCharacterCount, 'k'));
+    EXPECT_FALSE(decompressGzip(compressed.substr(0, compressed.size() / truncationDivisor)).has_value());
     EXPECT_FALSE(decompressGzip("\x1f\x8bnot gzip").has_value());
 }
 

@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "ingestion/KalshiSigner.h"
 
 #include <gtest/gtest.h>
@@ -15,6 +16,8 @@
 namespace kparb {
 namespace {
 
+using namespace test_constants::signer_test;
+
 struct KeyDeleter {
     void operator()(EVP_PKEY* key) const noexcept
     {
@@ -27,7 +30,7 @@ using KeyPointer = std::unique_ptr<EVP_PKEY, KeyDeleter>;
 KeyPointer generateKey(const char* algorithm)
 {
     if (std::string(algorithm) == "RSA") {
-        return KeyPointer(EVP_PKEY_Q_keygen(nullptr, nullptr, "RSA", static_cast<size_t>(2048)));
+        return KeyPointer(EVP_PKEY_Q_keygen(nullptr, nullptr, "RSA", static_cast<size_t>(rsaKeyBits)));
     }
     return KeyPointer(EVP_PKEY_Q_keygen(nullptr, nullptr, algorithm));
 }
@@ -48,7 +51,7 @@ std::vector<unsigned char> decodeBase64(const std::string& text)
     std::size_t padding = 0;
     if (!text.empty() && text.back() == '=') {
         ++padding;
-        if (text.size() > 1 && text[text.size() - 2] == '=') {
+        if (text.size() > 1 && text[text.size() - base64PaddingCharacters] == '=') {
             ++padding;
         }
     }
@@ -78,7 +81,7 @@ TEST(KalshiSignerTest, RsaKeysProduceVerifiablePssSignatures)
     ASSERT_TRUE(key);
     const KalshiSigner signer = KalshiSigner::fromPem(privateKeyPem(key.get()));
     EXPECT_EQ(signer.scheme(), SignatureScheme::RsaPssSha256);
-    const std::string message = "1703123456789GET/trade-api/ws/v2";
+    const std::string message = std::to_string(requestTimestampMilliseconds) + "GET/trade-api/ws/v2";
     EXPECT_TRUE(verify(key.get(), message, decodeBase64(signer.signToBase64(message)), true));
 }
 
@@ -88,9 +91,9 @@ TEST(KalshiSignerTest, Ed25519KeysProduceVerifiableSignatures)
     ASSERT_TRUE(key);
     const KalshiSigner signer = KalshiSigner::fromPem(privateKeyPem(key.get()));
     EXPECT_EQ(signer.scheme(), SignatureScheme::Ed25519);
-    const std::string message = "1703123456789GET/trade-api/ws/v2";
+    const std::string message = std::to_string(requestTimestampMilliseconds) + "GET/trade-api/ws/v2";
     const auto signature = decodeBase64(signer.signToBase64(message));
-    EXPECT_EQ(signature.size(), 64U);
+    EXPECT_EQ(signature.size(), ed25519SignatureBytes);
     EXPECT_TRUE(verify(key.get(), message, signature, false));
 }
 
@@ -98,12 +101,13 @@ TEST(KalshiSignerTest, AuthenticationHeadersSignTimestampMethodAndPath)
 {
     KeyPointer key = generateKey("ED25519");
     const KalshiSigner signer = KalshiSigner::fromPem(privateKeyPem(key.get()));
-    const auto headers = signer.authenticationHeaders("key-id", "GET", "/trade-api/ws/v2", 1703123456789);
-    ASSERT_EQ(headers.size(), 3U);
-    EXPECT_EQ(headers[0].first, "KALSHI-ACCESS-KEY");
-    EXPECT_EQ(headers[0].second, "key-id");
-    EXPECT_EQ(headers[2].second, "1703123456789");
-    EXPECT_TRUE(verify(key.get(), "1703123456789GET/trade-api/ws/v2", decodeBase64(headers[1].second), false));
+    const auto headers = signer.authenticationHeaders("key-id", "GET", "/trade-api/ws/v2", requestTimestampMilliseconds);
+    const std::string timestamp = std::to_string(requestTimestampMilliseconds);
+    ASSERT_EQ(headers.size(), authenticationHeaderCount);
+    EXPECT_EQ(headers[keyHeaderIndex].first, "KALSHI-ACCESS-KEY");
+    EXPECT_EQ(headers[keyHeaderIndex].second, "key-id");
+    EXPECT_EQ(headers[timestampHeaderIndex].second, timestamp);
+    EXPECT_TRUE(verify(key.get(), timestamp + "GET/trade-api/ws/v2", decodeBase64(headers[signatureHeaderIndex].second), false));
 }
 
 TEST(KalshiSignerTest, RejectsGarbageKeys)

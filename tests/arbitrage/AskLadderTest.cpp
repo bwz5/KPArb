@@ -1,3 +1,4 @@
+#include "TestConstants.h"
 #include "arbitrage/AskLadder.h"
 
 #include <gtest/gtest.h>
@@ -6,6 +7,10 @@
 
 namespace kparb {
 namespace {
+
+using namespace test_constants::ladder_test;
+using test_constants::prices::freePrice;
+using test_constants::prices::oneDollar;
 
 class AskLadderTest : public ::testing::Test {
 protected:
@@ -21,71 +26,73 @@ TEST_F(AskLadderTest, StartsEmpty)
 
 TEST_F(AskLadderTest, TracksLowestPriceAsBest)
 {
-    ladder->setLevel(600, 10);
-    ladder->setLevel(450, 20);
-    ladder->setLevel(700, 30);
-    EXPECT_EQ(ladder->bestPrice(), 450);
-    EXPECT_EQ(ladder->bestQuantity(), 20U);
+    ladder->setLevel(middleAsk, middleQuantity);
+    ladder->setLevel(lowAsk, lowQuantity);
+    ladder->setLevel(highAsk, highQuantity);
+    EXPECT_EQ(ladder->bestPrice(), lowAsk);
+    EXPECT_EQ(ladder->bestQuantity(), lowQuantity);
 }
 
 TEST_F(AskLadderTest, RemovingBestFindsNextLevelAcrossWords)
 {
-    ladder->setLevel(5, 1);
-    ladder->setLevel(900, 2);
-    ladder->setLevel(5, 0);
-    EXPECT_EQ(ladder->bestPrice(), 900);
-    EXPECT_EQ(ladder->bestQuantity(), 2U);
-    ladder->setLevel(900, 0);
+    ladder->setLevel(firstWordAsk, firstWordQuantity);
+    ladder->setLevel(lastWordAsk, lastWordQuantity);
+    ladder->setLevel(firstWordAsk, removedQuantity);
+    EXPECT_EQ(ladder->bestPrice(), lastWordAsk);
+    EXPECT_EQ(ladder->bestQuantity(), lastWordQuantity);
+    ladder->setLevel(lastWordAsk, removedQuantity);
     EXPECT_TRUE(ladder->isEmpty());
 }
 
 TEST_F(AskLadderTest, UpdatingBestQuantityKeepsPrice)
 {
-    ladder->setLevel(300, 10);
-    ladder->setLevel(300, 25);
-    EXPECT_EQ(ladder->bestPrice(), 300);
-    EXPECT_EQ(ladder->bestQuantity(), 25U);
+    ladder->setLevel(updatedAsk, initialQuantity);
+    ladder->setLevel(updatedAsk, replacedQuantity);
+    EXPECT_EQ(ladder->bestPrice(), updatedAsk);
+    EXPECT_EQ(ladder->bestQuantity(), replacedQuantity);
 }
 
 TEST_F(AskLadderTest, AddToLevelAccumulatesAndRemovesAtZero)
 {
-    ladder->addToLevel(400, 50);
-    ladder->addToLevel(400, 25);
-    EXPECT_EQ(ladder->quantityAt(400), 75U);
-    ladder->addToLevel(400, -100);
-    EXPECT_EQ(ladder->quantityAt(400), 0U);
+    ladder->addToLevel(accumulatedAsk, firstAddition);
+    ladder->addToLevel(accumulatedAsk, secondAddition);
+    EXPECT_EQ(ladder->quantityAt(accumulatedAsk), static_cast<Quantity>(firstAddition + secondAddition));
+    ladder->addToLevel(accumulatedAsk, oversizedRemoval);
+    EXPECT_EQ(ladder->quantityAt(accumulatedAsk), removedQuantity);
     EXPECT_TRUE(ladder->isEmpty());
 }
 
 TEST_F(AskLadderTest, RemovingNonBestLevelLeavesBestAlone)
 {
-    ladder->setLevel(100, 1);
-    ladder->setLevel(200, 2);
-    ladder->setLevel(200, 0);
-    EXPECT_EQ(ladder->bestPrice(), 100);
+    ladder->setLevel(bestAsk, bestQuantity);
+    ladder->setLevel(worseAsk, worseQuantity);
+    ladder->setLevel(worseAsk, removedQuantity);
+    EXPECT_EQ(ladder->bestPrice(), bestAsk);
     EXPECT_EQ(ladder->occupiedLevelCount(), 1U);
 }
 
 TEST_F(AskLadderTest, ClearForgetsStaleQuantities)
 {
-    ladder->setLevel(250, 40);
+    ladder->setLevel(clearedAsk, staleQuantity);
     ladder->clear();
-    EXPECT_EQ(ladder->quantityAt(250), 0U);
-    ladder->addToLevel(250, 5);
-    EXPECT_EQ(ladder->quantityAt(250), 5U);
+    EXPECT_EQ(ladder->quantityAt(clearedAsk), removedQuantity);
+    ladder->addToLevel(clearedAsk, static_cast<std::int32_t>(freshQuantity));
+    EXPECT_EQ(ladder->quantityAt(clearedAsk), freshQuantity);
 }
 
 TEST_F(AskLadderTest, IteratesOccupiedLevelsInOrder)
 {
-    ladder->setLevel(0, 1);
-    ladder->setLevel(63, 1);
-    ladder->setLevel(64, 1);
-    ladder->setLevel(1000, 1);
-    EXPECT_EQ(ladder->bestPrice(), 0);
-    EXPECT_EQ(ladder->nextOccupiedPriceAfter(0), 63);
-    EXPECT_EQ(ladder->nextOccupiedPriceAfter(63), 64);
-    EXPECT_EQ(ladder->nextOccupiedPriceAfter(64), 1000);
-    EXPECT_EQ(ladder->nextOccupiedPriceAfter(1000), noPrice);
+    constexpr auto lastPriceOfFirstWord = static_cast<Ticks>(AskLadder::bitsPerWord - 1);
+    constexpr auto firstPriceOfSecondWord = static_cast<Ticks>(AskLadder::bitsPerWord);
+    ladder->setLevel(freePrice, anyQuantity);
+    ladder->setLevel(lastPriceOfFirstWord, anyQuantity);
+    ladder->setLevel(firstPriceOfSecondWord, anyQuantity);
+    ladder->setLevel(oneDollar, anyQuantity);
+    EXPECT_EQ(ladder->bestPrice(), freePrice);
+    EXPECT_EQ(ladder->nextOccupiedPriceAfter(freePrice), lastPriceOfFirstWord);
+    EXPECT_EQ(ladder->nextOccupiedPriceAfter(lastPriceOfFirstWord), firstPriceOfSecondWord);
+    EXPECT_EQ(ladder->nextOccupiedPriceAfter(firstPriceOfSecondWord), oneDollar);
+    EXPECT_EQ(ladder->nextOccupiedPriceAfter(oneDollar), noPrice);
 }
 
 }
