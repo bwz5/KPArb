@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KPArb Monitor</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div>
+      <h1>KPArb</h1>
+      <p class="subtle" id="restart-line">Loading…</p>
+    </div>
+    <div class="masthead-right">
+      <span class="status-pill" id="bot-status"><span class="status-icon" aria-hidden="true"></span><span class="status-text">Checking</span></span>
+      <span class="subtle" id="updated-at"></span>
+    </div>
+  </header>
+
+  <section class="hero-row" aria-label="Paper P&amp;L">
+    <div class="hero card">
+      <div class="label">Paper P&amp;L</div>
+      <div class="hero-value" id="hero-pnl">–</div>
+      <div class="subtle" id="hero-detail"></div>
+    </div>
+    <div class="tiles three" id="pnl-tiles"></div>
+  </section>
+
+  <section class="grid-two">
+    <figure class="card chart-card">
+      <figcaption>
+        <h2>Cumulative paper P&amp;L</h2>
+        <p class="subtle">Settled trades at their real payout, pending trades at their hedged value</p>
+      </figcaption>
+      <div class="legend" id="pnl-legend"></div>
+      <div class="chart" id="pnl-chart"></div>
+    </figure>
+    <figure class="card chart-card">
+      <figcaption>
+        <h2>P&amp;L by day</h2>
+        <p class="subtle">Settled plus pending at hedged value, by the day the trade was placed</p>
+      </figcaption>
+      <div class="chart" id="daily-chart"></div>
+    </figure>
+  </section>
+
+  <h2 class="section-title">Bot health</h2>
+  <section class="tiles wide" id="health-tiles"></section>
+
+  <section class="grid-two">
+    <figure class="card chart-card">
+      <figcaption>
+        <h2>Streaming uptime</h2>
+        <p class="subtle">Share of each hour with both venue feeds connected, last 48 hours</p>
+      </figcaption>
+      <div class="chart" id="uptime-chart"></div>
+    </figure>
+    <figure class="card chart-card">
+      <figcaption>
+        <h2>Opportunities opened</h2>
+        <p class="subtle">New arbitrage opportunities per hour, last 48 hours</p>
+      </figcaption>
+      <div class="chart" id="opportunity-chart"></div>
+    </figure>
+  </section>
+
+  <h2 class="section-title">Execution</h2>
+  <section class="execution-row">
+    <div class="tiles three" id="execution-tiles"></div>
+    <div class="card kill-card">
+      <div class="label">Kill switch</div>
+      <p class="subtle" id="kill-detail"></p>
+      <button type="button" id="kill-button" class="button">Engage kill switch</button>
+    </div>
+  </section>
+
+  <section class="card table-card">
+    <h2>Recent paper trades</h2>
+    <div class="table-scroll"><table id="trades-table"></table></div>
+  </section>
+
+  <section class="card table-card">
+    <h2>Recent opportunities</h2>
+    <div class="table-scroll"><table id="opportunities-table"></table></div>
+  </section>
+
+  <section class="grid-two">
+    <section class="card table-card">
+      <h2>Matched pairs by series</h2>
+      <div class="table-scroll"><table id="coverage-table"></table></div>
+    </section>
+    <section class="card table-card">
+      <h2>Hourly data</h2>
+      <div class="table-scroll"><table id="hours-table"></table></div>
+    </section>
+  </section>
+</div>
+<div class="tooltip" id="tooltip" role="status" aria-live="polite" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

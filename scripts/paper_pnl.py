@@ -93,9 +93,13 @@ def main():
     parser.add_argument("--journal", default="data/executions.jsonl")
     parser.add_argument("--since", help="only count trades after this local time, e.g. 2026-11-09T12:00")
     parser.add_argument("--output", default="data/paper")
+    parser.add_argument("--json", action="store_true", help="print the settled trades and totals as JSON for the dashboard")
     arguments = parser.parse_args()
 
     if not os.path.exists(arguments.journal):
+        if arguments.json:
+            print(json.dumps({"trades": [], "totals": {}}))
+            return 0
         print(f"no journal at {arguments.journal} yet")
         return 1
     trades = load_trades(arguments.journal)
@@ -103,6 +107,9 @@ def main():
         since_ns = int(datetime.datetime.fromisoformat(arguments.since).timestamp() * NANOS_PER_SECOND)
         trades = [trade for trade in trades if trade["wall_time_ns"] >= since_ns]
     if not trades:
+        if arguments.json:
+            print(json.dumps({"trades": [], "totals": {}}))
+            return 0
         print("no filled paper trades yet")
         return 1
     settlements = load_settlements(trades, os.path.join(arguments.output, "settlements.json"))
@@ -127,6 +134,20 @@ def main():
             bucket["unwound"] += trade.get("unwound", 0) > 0
             bucket["unhedged"] += trade.get("unhedged", 0) > 0
         rows.append((trade, cost, realized, expected, payout_per_pair))
+
+    if arguments.json:
+        print(json.dumps({
+            "totals": dict(totals),
+            "trades": [{
+                "time_ns": trade["wall_time_ns"], "kalshi_ticker": trade["kalshi_ticker"], "polymarket_slug": trade["polymarket_slug"],
+                "direction": trade["direction"], "contracts": trade.get("first_filled", 0), "cost": cost, "realized": realized,
+                "expected": expected, "payout_per_pair": payout_per_pair, "chased": trade.get("chased", 0),
+                "unwound": trade.get("unwound", 0), "unhedged": trade.get("unhedged", 0),
+                "kalshi_dollars": trade.get("kalshi_dollars", 0.0), "polymarket_dollars": trade.get("polymarket_dollars", 0.0),
+                "halted": trade.get("halted", ""),
+            } for trade, cost, realized, expected, payout_per_pair in rows],
+        }))
+        return 0
 
     print(f"{'day':<11} {'trades':>6} {'settled':>7} {'realized':>9} {'pending':>7} {'pending_exp':>11} {'spent':>9} {'mismatch':>8}")
     for name, bucket in list(by_day.items()) + [("total", totals)]:
