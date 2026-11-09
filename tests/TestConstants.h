@@ -206,6 +206,7 @@ inline constexpr std::size_t sportsMarketCount = 2;
 inline constexpr std::size_t strikeMarketCount = 3;
 inline constexpr int httpOk = 200;
 inline constexpr std::size_t requestsAfterOneTruncatedPage = 2;
+inline constexpr int cancellationBudgetMilliseconds = 500;
 }
 
 namespace config_test {

@@ -3,6 +3,7 @@
 #include "ingestion/HttpClient.h"
 #include "ingestion/MarketInfo.h"
 
+#include <atomic>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -19,6 +20,7 @@ struct KalshiCatalogSettings {
     bool excludeMultivariateMarkets = true;
     std::int64_t minimumCloseTimestamp = 0;
     std::int64_t maximumCloseTimestamp = 0;
+    const std::atomic<bool>* stopRequested = nullptr;
 };
 
 class KalshiMarketCatalog {

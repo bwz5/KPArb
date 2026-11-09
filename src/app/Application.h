@@ -66,7 +66,7 @@ private:
     int runCandidatesOnly(LogChannels& channels);
     std::optional<DiscoveredMarkets> discoverMarketsUntilAvailable(LogChannel& applicationChannel, Clock::time_point overallDeadline,
         const std::atomic<bool>& shutdownRequested);
-    DiscoveredMarkets discoverMarkets(LogChannel& applicationChannel);
+    DiscoveredMarkets discoverMarkets(LogChannel& applicationChannel, const std::atomic<bool>* stopRequested = nullptr);
     StreamOutcome streamAndDetect(const std::vector<MatchedPair>& pairs, LogChannels& channels,
         const std::function<bool()>& shouldEndSession, const std::atomic<bool>& shutdownRequested);
 

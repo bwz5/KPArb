@@ -3,6 +3,7 @@
 #include "ingestion/HttpClient.h"
 #include "ingestion/MarketInfo.h"
 
+#include <atomic>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -24,6 +25,7 @@ struct PolymarketCatalogSettings {
     std::int64_t minimumEndTimestamp = 0;
     std::int64_t maximumEndTimestamp = 0;
     std::string sportsMarketType;
+    const std::atomic<bool>* stopRequested = nullptr;
 };
 
 class PolymarketMarketCatalog {

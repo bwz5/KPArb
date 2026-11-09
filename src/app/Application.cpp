@@ -261,35 +261,50 @@ int Application::runSavedPairs(LogChannels& channels, Clock::time_point overallD
 
 int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point overallDeadline, const std::atomic<bool>& shutdownRequested)
 {
-    std::cout << "=== discovery cycle 1 ===\n";
-    std::optional<DiscoveredMarkets> markets = discoverMarketsUntilAvailable(channels.discovery, overallDeadline, shutdownRequested);
-    if (!markets) {
-        return 0;
-    }
-    auto matcher = std::make_unique<BackgroundMatcher>(config, channels.matcher);
-    matcher->start(std::move(markets->kalshi), std::move(markets->polymarket));
-    markets.reset();
-
-    if (options.mode == RunMode::MatchOnly) {
-        matcher->waitUntilFinished();
-        saveMatchedPairs(config.matchedPairsPath, matcher->acceptedPairs());
-        std::cout << "saved " << matcher->acceptedPairCount() << " matched pairs to " << config.matchedPairsPath.string() << '\n';
-        return 0;
-    }
-
     const auto isReadyToStream = [this](const BackgroundMatcher& candidate, Clock::time_point deadline) {
         return candidate.acceptedPairCount() >= config.pairsBeforeStreaming || candidate.isFinished() || Clock::now() >= deadline;
     };
     const auto matchingWait = std::chrono::minutes(config.maximumMinutesBeforeStreaming);
-    const auto firstStreamingDeadline = Clock::now() + matchingWait;
-    waitUntil([&] { return isReadyToStream(*matcher, firstStreamingDeadline); }, shutdownRequested);
+    std::unique_ptr<BackgroundMatcher> matcher;
+    std::vector<MatchedPair> savedPairs;
+    if (options.mode != RunMode::MatchOnly && std::filesystem::exists(config.matchedPairsPath)) {
+        try {
+            savedPairs = loadMatchedPairs(config.matchedPairsPath);
+        } catch (const std::exception& error) {
+            std::cout << "could not read saved pairs: " << error.what() << '\n';
+        }
+    }
+
+    if (savedPairs.empty()) {
+        std::cout << "=== discovery cycle 1 ===\n";
+        std::optional<DiscoveredMarkets> markets = discoverMarketsUntilAvailable(channels.discovery, overallDeadline, shutdownRequested);
+        if (!markets) {
+            return 0;
+        }
+        matcher = std::make_unique<BackgroundMatcher>(config, channels.matcher);
+        matcher->start(std::move(markets->kalshi), std::move(markets->polymarket));
+        markets.reset();
+        if (options.mode == RunMode::MatchOnly) {
+            matcher->waitUntilFinished();
+            saveMatchedPairs(config.matchedPairsPath, matcher->acceptedPairs());
+            std::cout << "saved " << matcher->acceptedPairCount() << " matched pairs to " << config.matchedPairsPath.string() << '\n';
+            return 0;
+        }
+        const auto firstStreamingDeadline = Clock::now() + matchingWait;
+        waitUntil([&] { return isReadyToStream(*matcher, firstStreamingDeadline); }, shutdownRequested);
+    } else {
+        std::cout << "streaming " << savedPairs.size() << " saved pairs from " << config.matchedPairsPath.string()
+                  << " while the first discovery runs\n";
+    }
+    const auto currentPairs = [&]() { return matcher ? matcher->acceptedPairs() : savedPairs; };
 
     const auto refreshInterval = std::chrono::minutes(config.rematchIntervalMinutes);
-    auto nextRefreshAt = config.rematchIntervalMinutes > 0 ? Clock::now() + refreshInterval : Clock::time_point::max();
+    auto nextRefreshAt = !matcher ? Clock::now()
+        : config.rematchIntervalMinutes > 0 ? Clock::now() + refreshInterval : Clock::time_point::max();
     std::unique_ptr<MarketRefresh> refresh;
     std::unique_ptr<BackgroundMatcher> nextMatcher;
     Clock::time_point nextMatcherDeadline;
-    std::size_t cycle = 1;
+    std::size_t cycle = matcher ? 1 : 0;
 
     const auto advanceRefresh = [&]() -> bool {
         if (!refresh && !nextMatcher && Clock::now() >= nextRefreshAt) {
@@ -309,7 +324,9 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
                 nextRefreshAt = Clock::now() + refreshInterval;
                 return false;
             }
-            matcher->stop();
+            if (matcher) {
+                matcher->stop();
+            }
             nextMatcher = std::make_unique<BackgroundMatcher>(config, channels.matcher);
             nextMatcher->start(std::move(refreshed->kalshi), std::move(refreshed->polymarket));
             nextMatcherDeadline = Clock::now() + matchingWait;
@@ -326,33 +343,35 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
 
     int exitCode = -1;
     while (exitCode < 0 && !shutdownRequested.load(std::memory_order_acquire) && Clock::now() < overallDeadline) {
-        auto pairs = matcher->acceptedPairs();
+        auto pairs = currentPairs();
         if (pairs.size() > config.maximumPairs) {
             pairs.resize(config.maximumPairs);
         }
         saveMatchedPairs(config.matchedPairsPath, pairs);
         if (pairs.empty()) {
             std::cout << "no matched pairs yet, waiting for matching or the next discovery cycle\n";
-            waitUntil([&] { return advanceRefresh() || matcher->acceptedPairCount() > 0 || Clock::now() >= overallDeadline; },
+            waitUntil([&] { return advanceRefresh() || (matcher && matcher->acceptedPairCount() > 0) || Clock::now() >= overallDeadline; },
                 shutdownRequested);
             continue;
         }
 
         const std::size_t streamedPairCount = pairs.size();
         const bool canGrow = streamedPairCount < config.maximumPairs;
+        const auto sessionStartedAt = Clock::now();
         const auto shouldEndSession = [&] {
             if (Clock::now() >= overallDeadline || advanceRefresh()) {
                 return true;
             }
-            if (!canGrow || nextMatcher) {
+            if (!canGrow || nextMatcher || !matcher
+                || Clock::now() - sessionStartedAt < std::chrono::minutes(config.minimumMinutesBetweenStreamRestarts)) {
                 return false;
             }
             const std::size_t accepted = matcher->acceptedPairCount();
             const bool finishedWithNewPairs = matcher->isFinished() && accepted > streamedPairCount;
             return finishedWithNewPairs || accepted >= streamedPairCount + config.pairsBetweenStreamRestarts;
         };
-        std::cout << (matcher->isFinished() ? "streaming all " : "streaming while matching continues: ") << streamedPairCount
-                  << " pairs\n";
+        std::cout << (!matcher ? "streaming saved pairs: " : matcher->isFinished() ? "streaming all " : "streaming while matching continues: ")
+                  << streamedPairCount << " pairs\n";
         switch (streamAndDetect(pairs, channels, shouldEndSession, shutdownRequested)) {
         case StreamOutcome::AuthenticationFailed:
             exitCode = 3;
@@ -363,7 +382,7 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
         case StreamOutcome::ShutdownRequested:
             break;
         case StreamOutcome::SessionEnded:
-            std::cout << "restarting stream with " << matcher->acceptedPairCount() << " pairs\n";
+            std::cout << "restarting stream with " << currentPairs().size() << " pairs\n";
             break;
         }
     }
@@ -371,8 +390,10 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
     if (nextMatcher) {
         nextMatcher->stop();
     }
-    matcher->stop();
-    saveMatchedPairs(config.matchedPairsPath, matcher->acceptedPairs());
+    if (matcher) {
+        matcher->stop();
+        saveMatchedPairs(config.matchedPairsPath, matcher->acceptedPairs());
+    }
     return exitCode >= 0 ? exitCode : 0;
 }
 
@@ -415,7 +436,7 @@ std::optional<DiscoveredMarkets> Application::discoverMarketsUntilAvailable(LogC
     constexpr int discoveryRetrySeconds = 60;
     while (!shutdownRequested.load(std::memory_order_acquire) && Clock::now() < overallDeadline) {
         try {
-            return discoverMarkets(applicationChannel);
+            return discoverMarkets(applicationChannel, &shutdownRequested);
         } catch (const std::exception& error) {
             std::cout << "discovery failed: " << error.what() << "\nretrying discovery in " << discoveryRetrySeconds << "s\n";
         }
@@ -426,7 +447,7 @@ std::optional<DiscoveredMarkets> Application::discoverMarketsUntilAvailable(LogC
     return std::nullopt;
 }
 
-DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel)
+DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel, const std::atomic<bool>* stopRequested)
 {
     HttpClient httpClient;
     const std::int64_t nowSeconds = wallClockSeconds();
@@ -436,6 +457,7 @@ DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel)
 
     KalshiCatalogSettings kalshiSettings = config.kalshiCatalog;
     kalshiSettings.minimumCloseTimestamp = window.earliestSeconds;
+    kalshiSettings.stopRequested = stopRequested;
     kalshiSettings.maximumCloseTimestamp = std::max(window.latestSeconds, nowSeconds + config.kalshiCloseTimeSearchDays * 86400);
     std::cout << "fetching Kalshi markets...\n";
     KalshiMarketCatalog kalshiCatalog(kalshiSettings, httpClient);
@@ -453,6 +475,7 @@ DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel)
 
     PolymarketCatalogSettings polymarketSettings = config.polymarketCatalog;
     polymarketSettings.minimumEndTimestamp = window.earliestSeconds;
+    polymarketSettings.stopRequested = stopRequested;
     polymarketSettings.maximumEndTimestamp = window.latestSeconds;
     const auto printPolymarketProgress = [](std::size_t pages, std::size_t markets) {
         if (pages % 25 == 0) {

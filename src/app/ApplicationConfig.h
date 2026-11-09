@@ -39,6 +39,7 @@ struct ApplicationConfig {
     std::size_t pairsBeforeStreaming = 500;
     std::int64_t maximumMinutesBeforeStreaming = 5;
     std::size_t pairsBetweenStreamRestarts = 25;
+    std::int64_t minimumMinutesBetweenStreamRestarts = 10;
 
     EngineSettings engine;
     double kalshiTakerFeeRate = 0.07;

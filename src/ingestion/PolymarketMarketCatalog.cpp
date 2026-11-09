@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <iterator>
 #include <cmath>
@@ -18,6 +19,22 @@ namespace {
 
 constexpr std::size_t rulesSummaryCharacters = 400;
 constexpr int maximumPageAttempts = 5;
+
+bool isStopRequested(const std::atomic<bool>* stopRequested) noexcept
+{
+    return stopRequested != nullptr && stopRequested->load(std::memory_order_acquire);
+}
+
+void sleepUnlessStopped(std::chrono::milliseconds duration, const std::atomic<bool>* stopRequested)
+{
+    constexpr std::chrono::milliseconds slice{100};
+    for (std::chrono::milliseconds slept{0}; slept < duration && !isStopRequested(stopRequested); slept += slice) {
+        std::this_thread::sleep_for(std::min(slice, duration - slept));
+    }
+    if (isStopRequested(stopRequested)) {
+        throw std::runtime_error("catalog fetch cancelled by shutdown");
+    }
+}
 
 std::string readString(const nlohmann::json& object, const char* key)
 {
@@ -199,7 +216,7 @@ std::vector<MarketInfo> PolymarketMarketCatalog::fetchOpenMarkets(const Progress
             }
             const auto wait = response.retryAfterSeconds > 0 ? std::chrono::seconds(response.retryAfterSeconds)
                                                              : std::chrono::seconds(1LL << attempt);
-            std::this_thread::sleep_for(wait);
+            sleepUnlessStopped(std::chrono::duration_cast<std::chrono::milliseconds>(wait), settings.stopRequested);
         }
         if (!failure.empty()) {
             throw std::runtime_error("Polymarket markets request failed with " + failure);
@@ -212,7 +229,7 @@ std::vector<MarketInfo> PolymarketMarketCatalog::fetchOpenMarkets(const Progress
             break;
         }
         cursor = parsed.nextCursor;
-        std::this_thread::sleep_for(100ms);
+        sleepUnlessStopped(100ms, settings.stopRequested);
     }
     return markets;
 }

@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <fstream>
 #include <sstream>
 
@@ -65,6 +67,20 @@ TEST(CatalogParsingTest, TruncatedPolymarketPageIsRequestedAgain)
     parsePolymarketMarketsPage(page, expected);
     EXPECT_EQ(catalog.fetchOpenMarkets().size(), expected.size());
     EXPECT_EQ(client.requestCount, requestsAfterOneTruncatedPage);
+}
+
+TEST(CatalogParsingTest, ShutdownInterruptsRetryBackoff)
+{
+    const std::string page = readFixture("polymarket_markets_page.json");
+    ScriptedHttpClient client({page.substr(0, page.size() / 2)});
+    std::atomic<bool> stop{true};
+    PolymarketCatalogSettings settings;
+    settings.stopRequested = &stop;
+    PolymarketMarketCatalog catalog(settings, client);
+    const auto started = std::chrono::steady_clock::now();
+    EXPECT_THROW(catalog.fetchOpenMarkets(), std::runtime_error);
+    EXPECT_LT(std::chrono::steady_clock::now() - started, std::chrono::milliseconds(cancellationBudgetMilliseconds));
+    EXPECT_EQ(client.requestCount, 1U);
 }
 
 TEST(CatalogParsingTest, ParsesKalshiBinaryMarketsAndCursor)

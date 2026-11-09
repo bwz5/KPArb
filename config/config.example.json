@@ -41,7 +41,8 @@
     "rematchIntervalMinutes": 60,
     "pairsBeforeStreaming": 500,
     "maximumMinutesBeforeStreaming": 5,
-    "pairsBetweenStreamRestarts": 25
+    "pairsBetweenStreamRestarts": 25,
+    "minimumMinutesBetweenStreamRestarts": 10
   },
   "matching": {
     "candidatesPerMarket": 3,

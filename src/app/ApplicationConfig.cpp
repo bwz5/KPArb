@@ -166,6 +166,7 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readInto(discovery, "pairsBeforeStreaming", config.pairsBeforeStreaming);
     readInto(discovery, "maximumMinutesBeforeStreaming", config.maximumMinutesBeforeStreaming);
     readInto(discovery, "pairsBetweenStreamRestarts", config.pairsBetweenStreamRestarts);
+    readInto(discovery, "minimumMinutesBetweenStreamRestarts", config.minimumMinutesBetweenStreamRestarts);
 
     const auto logging = sectionOf(document, "logging");
     readPathInto(logging, "directory", config.logDirectory);
