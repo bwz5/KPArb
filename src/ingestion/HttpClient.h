@@ -29,13 +29,13 @@ struct HttpResponse {
 class HttpClient {
 public:
     HttpClient();
-    ~HttpClient();
+    virtual ~HttpClient();
 
     HttpClient(const HttpClient&) = delete;
     HttpClient& operator=(const HttpClient&) = delete;
 
-    HttpResponse get(const std::string& url, const HttpHeaders& headers = {});
-    HttpResponse post(const std::string& url, const std::string& body, const HttpHeaders& headers = {});
+    virtual HttpResponse get(const std::string& url, const HttpHeaders& headers = {});
+    virtual HttpResponse post(const std::string& url, const std::string& body, const HttpHeaders& headers = {});
 
 private:
     std::unique_ptr<ix::HttpClient> client;

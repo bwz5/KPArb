@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
@@ -20,6 +21,50 @@ std::string readFixture(const std::string& name)
     std::stringstream buffer;
     buffer << file.rdbuf();
     return buffer.str();
+}
+
+class ScriptedHttpClient final : public HttpClient {
+public:
+    explicit ScriptedHttpClient(std::vector<std::string> scriptedBodies)
+        : bodies(std::move(scriptedBodies))
+    {
+    }
+
+    HttpResponse get(const std::string&, const HttpHeaders&) override
+    {
+        HttpResponse response;
+        response.statusCode = httpOk;
+        response.body = bodies[std::min(requestCount, bodies.size() - 1)];
+        ++requestCount;
+        return response;
+    }
+
+    std::vector<std::string> bodies;
+    std::size_t requestCount = 0;
+};
+
+TEST(CatalogParsingTest, TruncatedKalshiPageIsRequestedAgain)
+{
+    const std::string page = readFixture("kalshi_markets_page.json");
+    ScriptedHttpClient client({page.substr(0, page.size() / 2), page});
+    KalshiCatalogSettings settings;
+    settings.maximumPages = 1;
+    KalshiMarketCatalog catalog(settings, client);
+    EXPECT_EQ(catalog.fetchOpenMarkets().size(), kalshiFixtureMarketCount);
+    EXPECT_EQ(client.requestCount, requestsAfterOneTruncatedPage);
+}
+
+TEST(CatalogParsingTest, TruncatedPolymarketPageIsRequestedAgain)
+{
+    const std::string page = readFixture("polymarket_markets_page.json");
+    ScriptedHttpClient client({page.substr(0, page.size() / 2), page});
+    PolymarketCatalogSettings settings;
+    settings.maximumPages = 1;
+    PolymarketMarketCatalog catalog(settings, client);
+    std::vector<MarketInfo> expected;
+    parsePolymarketMarketsPage(page, expected);
+    EXPECT_EQ(catalog.fetchOpenMarkets().size(), expected.size());
+    EXPECT_EQ(client.requestCount, requestsAfterOneTruncatedPage);
 }
 
 TEST(CatalogParsingTest, ParsesKalshiBinaryMarketsAndCursor)

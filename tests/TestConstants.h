@@ -199,6 +199,8 @@ inline constexpr double atlantaWashingtonTotal = 225.5;
 inline constexpr double newYorkHighCap = 50.0;
 inline constexpr std::size_t sportsMarketCount = 2;
 inline constexpr std::size_t strikeMarketCount = 3;
+inline constexpr int httpOk = 200;
+inline constexpr std::size_t requestsAfterOneTruncatedPage = 2;
 }
 
 namespace config_test {

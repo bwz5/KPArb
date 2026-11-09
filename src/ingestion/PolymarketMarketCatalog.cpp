@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 
 #include <chrono>
+#include <iterator>
 #include <cmath>
 #include <stdexcept>
 #include <thread>
@@ -16,6 +17,7 @@ namespace kparb {
 namespace {
 
 constexpr std::size_t rulesSummaryCharacters = 400;
+constexpr int maximumPageAttempts = 5;
 
 std::string readString(const nlohmann::json& object, const char* key)
 {
@@ -178,21 +180,31 @@ std::vector<MarketInfo> PolymarketMarketCatalog::fetchOpenMarkets(const Progress
         if (!cursor.empty()) {
             url += "&after_cursor=" + encodeUrlComponent(cursor);
         }
-        HttpResponse response;
-        for (int attempt = 0; attempt < 5; ++attempt) {
-            response = client.get(url);
+        std::vector<MarketInfo> pageMarkets;
+        PolymarketPage parsed;
+        std::string failure;
+        for (int attempt = 0; attempt < maximumPageAttempts; ++attempt) {
+            const HttpResponse response = client.get(url);
             if (response.isSuccess()) {
-                break;
+                try {
+                    pageMarkets.clear();
+                    parsed = parsePolymarketMarketsPage(response.body, pageMarkets);
+                    failure.clear();
+                    break;
+                } catch (const std::exception& error) {
+                    failure = std::string("unreadable page: ") + error.what();
+                }
+            } else {
+                failure = "status " + std::to_string(response.statusCode) + ": " + response.errorMessage + " " + response.body.substr(0, 300);
             }
             const auto wait = response.retryAfterSeconds > 0 ? std::chrono::seconds(response.retryAfterSeconds)
                                                              : std::chrono::seconds(1LL << attempt);
             std::this_thread::sleep_for(wait);
         }
-        if (!response.isSuccess()) {
-            throw std::runtime_error("Polymarket markets request failed with status " + std::to_string(response.statusCode)
-                + ": " + response.errorMessage + " " + response.body.substr(0, 300));
+        if (!failure.empty()) {
+            throw std::runtime_error("Polymarket markets request failed with " + failure);
         }
-        const PolymarketPage parsed = parsePolymarketMarketsPage(response.body, markets);
+        markets.insert(markets.end(), std::make_move_iterator(pageMarkets.begin()), std::make_move_iterator(pageMarkets.end()));
         if (onProgress) {
             onProgress(page + 1, markets.size());
         }
