@@ -69,7 +69,7 @@ ExecutionSignal openSignal(std::int64_t detectedAt = signalTimeNanos)
 
 PairRoute route()
 {
-    return PairRoute{"KXNBAGAME-26NOV13OKCLAC-OKC", "token-okc", "token-lac"};
+    return PairRoute{"KXNBAGAME-26NOV13OKCLAC-OKC", "token-okc", "token-lac", "nba-okc-lac-2026-11-13", "token-okc", 0.0, 1.0};
 }
 
 class TradeExecutorTest : public ::testing::Test {
@@ -151,6 +151,10 @@ TEST_F(TradeExecutorTest, FullyHedgedTradeIsJournaledOncePerEpisode)
     const auto entry = nlohmann::json::parse(line);
     EXPECT_EQ(entry["second_filled"].get<int>(), static_cast<int>(signalContracts));
     EXPECT_EQ(entry["mode"].get<std::string>(), "paper");
+    ASSERT_EQ(entry["fills"].size(), 2U);
+    EXPECT_EQ(entry["fills"][0]["side"], "yes");
+    EXPECT_EQ(entry["fills"][1]["outcome_index"], 1);
+    EXPECT_EQ(entry["polymarket_slug"], "nba-okc-lac-2026-11-13");
 }
 
 TEST_F(TradeExecutorTest, ShortSecondLegIsChasedThenUnwound)
@@ -173,6 +177,9 @@ TEST_F(TradeExecutorTest, ShortSecondLegIsChasedThenUnwound)
         * ticksToDollars(kalshiAsk + kalshiOppositeAsk + PlannerSettings{}.unwindSlippageTicks - ticksPerDollar);
     EXPECT_NEAR(report.lossDollars, expectedLoss, dollarTolerance);
     EXPECT_TRUE(exposure.isTradingAllowed());
+    ASSERT_EQ(report.fills.size(), 4U);
+    EXPECT_EQ(report.fills[3].stage, "unwind");
+    EXPECT_EQ(report.fills[3].side, ContractSide::No);
 }
 
 TEST_F(TradeExecutorTest, LeftoverExposureHaltsTrading)

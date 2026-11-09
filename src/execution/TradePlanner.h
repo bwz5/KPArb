@@ -25,6 +25,10 @@ struct PairRoute {
     std::string kalshiTicker;
     std::string polymarketAlignedToken;
     std::string polymarketOppositeToken;
+    std::string polymarketSlug;
+    std::string polymarketYesToken;
+    double polymarketTakerFeeRate = 0.0;
+    double polymarketTakerFeeExponent = 1.0;
 };
 
 struct LegPlan {

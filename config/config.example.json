@@ -80,7 +80,7 @@
     "maximumDollarsPerPair": 50,
     "kalshiBudgetDollars": 250,
     "polymarketBudgetDollars": 250,
-    "rebalanceHours": 48,
+    "rebalanceHours": 24,
     "maximumLossDollars": 25,
     "killSwitchPath": "data/KILL",
     "journalPath": "data/executions.jsonl",

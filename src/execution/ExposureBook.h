@@ -13,7 +13,7 @@ struct RiskSettings {
     double maximumDollarsPerPair = 50.0;
     double kalshiBudgetDollars = 250.0;
     double polymarketBudgetDollars = 250.0;
-    double rebalanceHours = 48.0;
+    double rebalanceHours = 24.0;
     double maximumLossDollars = 25.0;
     std::filesystem::path killSwitchPath = "data/KILL";
 };

@@ -150,14 +150,19 @@ ExecutionReport TradeExecutor::execute(const ExecutionSignal& signal, const Trad
     static_cast<void>(signal);
     ExecutionReport result;
     result.requestedContracts = contracts;
-    const auto addSpend = [&result](Venue venue, std::uint32_t filled, Ticks price) {
-        (venue == Venue::Kalshi ? result.kalshiDollars : result.polymarketDollars) += dollarsFor(filled, price);
+    const auto record = [&result](const LegPlan& leg, bool isUnwind, std::uint32_t filled, Ticks price, const char* stage) {
+        if (filled == 0 || price == noPrice) {
+            return;
+        }
+        (leg.venue == Venue::Kalshi ? result.kalshiDollars : result.polymarketDollars) += dollarsFor(filled, price);
+        result.fills.push_back(FilledOrder{leg.venue, isUnwind ? leg.unwindMarketIdentifier : leg.marketIdentifier,
+            isUnwind ? leg.unwindSide : leg.side, filled, price, stage});
     };
 
     const OrderResult first = place(plan.first, false, plan.first.limitPrice, contracts, "first");
     result.firstFilled = first.filledContracts;
     result.firstError = first.errorMessage;
-    addSpend(plan.first.venue, first.filledContracts, first.averagePrice);
+    record(plan.first, false, first.filledContracts, first.averagePrice, "first");
     if (first.filledContracts == 0) {
         return result;
     }
@@ -165,21 +170,21 @@ ExecutionReport TradeExecutor::execute(const ExecutionSignal& signal, const Trad
     const OrderResult second = place(plan.second, false, plan.second.limitPrice, first.filledContracts, "second");
     result.secondFilled = second.filledContracts;
     result.secondError = second.errorMessage;
-    addSpend(plan.second.venue, second.filledContracts, second.averagePrice);
+    record(plan.second, false, second.filledContracts, second.averagePrice, "second");
     std::uint32_t residual = first.filledContracts - std::min(first.filledContracts, second.filledContracts);
 
     if (residual > 0) {
         ++executorCounters.chased;
         const OrderResult chase = place(plan.second, false, plan.second.chaseLimitPrice, residual, "chase");
         result.chasedFilled = std::min(residual, chase.filledContracts);
-        addSpend(plan.second.venue, result.chasedFilled, chase.averagePrice);
+        record(plan.second, false, result.chasedFilled, chase.averagePrice, "chase");
         residual -= result.chasedFilled;
     }
     if (residual > 0) {
         ++executorCounters.unwound;
         const OrderResult unwind = place(plan.first, true, plan.first.unwindLimitPrice, residual, "unwind");
         result.unwoundContracts = std::min(residual, unwind.filledContracts);
-        addSpend(plan.first.venue, result.unwoundContracts, unwind.averagePrice);
+        record(plan.first, true, result.unwoundContracts, unwind.averagePrice, "unwind");
         if (result.unwoundContracts > 0 && first.averagePrice != noPrice && unwind.averagePrice != noPrice) {
             const std::int64_t lossTicks = static_cast<std::int64_t>(first.averagePrice) + unwind.averagePrice - ticksPerDollar;
             result.lossDollars += std::max<std::int64_t>(0, lossTicks) * static_cast<double>(result.unwoundContracts) / ticksPerDollar;
@@ -196,10 +201,30 @@ void TradeExecutor::journal(const ExecutionSignal& signal, const ExecutionReport
         return;
     }
     const PairRoute& route = routes[signal.pairIndex];
+    nlohmann::json fills = nlohmann::json::array();
+    for (const FilledOrder& fill : executed.fills) {
+        nlohmann::json entry{
+            {"venue", venueLabel(fill.venue)},
+            {"market", fill.marketIdentifier},
+            {"contracts", fill.contracts},
+            {"price", ticksToDollars(fill.averagePrice)},
+            {"stage", fill.stage},
+        };
+        if (fill.venue == Venue::Kalshi) {
+            entry["side"] = fill.side == ContractSide::Yes ? "yes" : "no";
+        } else {
+            entry["outcome_index"] = fill.marketIdentifier == route.polymarketYesToken ? 0 : 1;
+        }
+        fills.push_back(std::move(entry));
+    }
     nlohmann::json line{
         {"wall_time_ns", wallClockNanoseconds()},
         {"mode", settings.mode == ExecutionMode::Live ? "live" : "paper"},
         {"kalshi_ticker", route.kalshiTicker},
+        {"polymarket_slug", route.polymarketSlug},
+        {"polymarket_fee_rate", route.polymarketTakerFeeRate},
+        {"polymarket_fee_exponent", route.polymarketTakerFeeExponent},
+        {"fills", fills},
         {"direction", signal.direction == TradeDirection::BuyKalshiYesBuyPolymarketNo ? "kalshi_yes+polymarket_no" : "kalshi_no+polymarket_yes"},
         {"signal_kalshi_price", ticksToDollars(signal.kalshiPrice)},
         {"signal_polymarket_price", ticksToDollars(signal.polymarketPrice)},

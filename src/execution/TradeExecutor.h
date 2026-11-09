@@ -41,6 +41,15 @@ struct ExecutorCounters {
     std::uint64_t leftUnhedged = 0;
 };
 
+struct FilledOrder {
+    Venue venue = Venue::Kalshi;
+    std::string marketIdentifier;
+    ContractSide side = ContractSide::Yes;
+    std::uint32_t contracts = 0;
+    Ticks averagePrice = noPrice;
+    std::string stage;
+};
+
 struct ExecutionReport {
     std::uint32_t requestedContracts = 0;
     std::uint32_t firstFilled = 0;
@@ -53,6 +62,7 @@ struct ExecutionReport {
     double lossDollars = 0.0;
     std::string firstError;
     std::string secondError;
+    std::vector<FilledOrder> fills;
 };
 
 class TradeExecutor {

@@ -365,7 +365,7 @@ def main():
     parser.add_argument("--delays-ms", default="0,50,100,250,500,1000,2000,5000")
     parser.add_argument("--bankroll-dollars", type=float, default=0.0)
     parser.add_argument("--maximum-trade-dollars", type=float, default=0.0)
-    parser.add_argument("--rebalance-hours", type=float, default=48.0,
+    parser.add_argument("--rebalance-hours", type=float, default=24.0,
                         help="with a bankroll, split it across the two venues and even them out this often (0 = one shared pool)")
     parser.add_argument("--exclude-series", default="", help="comma-separated Kalshi series prefixes to skip, e.g. KXCS2,KXDOTA2")
     parser.add_argument("--suspect-edge", type=float, default=0.20)

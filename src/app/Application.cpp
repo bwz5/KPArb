@@ -564,6 +564,10 @@ StreamOutcome Application::streamAndDetect(const std::vector<MatchedPair>& pairs
                 pair.kalshiTicker,
                 pair.isInverted ? pair.polymarketNoToken : pair.polymarketYesToken,
                 pair.isInverted ? pair.polymarketYesToken : pair.polymarketNoToken,
+                pair.polymarketSlug.empty() ? pair.polymarketIdentifier : pair.polymarketSlug,
+                pair.polymarketYesToken,
+                pair.polymarketTakerFeeRate,
+                pair.polymarketTakerFeeExponent,
             });
         }
         signalQueue = std::make_unique<ExecutionSignalQueue>();
