@@ -100,6 +100,14 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readPathInto(matching, "entitiesPath", config.entitiesPath);
     readInto(matching, "sharedTeamBonus", config.matcher.candidates.sharedTeamBonus);
     readInto(matching, "excludedKalshiTickerPrefixes", config.matcher.excludedKalshiTickerPrefixes);
+    readInto(matching, "defaultNoResultProbability", config.matcher.defaultNoResultProbability);
+    const auto noResultOverrides = matching.find("noResultProbabilityByKalshiPrefix");
+    if (noResultOverrides != matching.end() && noResultOverrides->is_object()) {
+        config.matcher.noResultProbabilityByKalshiPrefix.clear();
+        for (const auto& [prefix, probability] : noResultOverrides->items()) {
+            config.matcher.noResultProbabilityByKalshiPrefix.emplace_back(prefix, probability.get<double>());
+        }
+    }
 
     const auto arbitrage = sectionOf(document, "arbitrage");
     readInto(arbitrage, "minimumEdgeTicks", config.engine.minimumEdgeTicks);

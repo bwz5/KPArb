@@ -24,6 +24,9 @@ void saveMatchedPairs(const std::filesystem::path& path, const std::vector<Match
             {"polymarketTakerFeeRate", pair.polymarketTakerFeeRate},
             {"polymarketTakerFeeExponent", pair.polymarketTakerFeeExponent},
             {"isManual", pair.isManual},
+            {"noResultProbability", pair.noResultProbability},
+            {"polymarketYesNoResultValue", pair.polymarketYesNoResultValue},
+            {"polymarketNoNoResultValue", pair.polymarketNoNoResultValue},
         });
     }
     if (path.has_parent_path()) {
@@ -58,6 +61,9 @@ std::vector<MatchedPair> loadMatchedPairs(const std::filesystem::path& path)
         pair.polymarketTakerFeeRate = entry.value("polymarketTakerFeeRate", 0.0);
         pair.polymarketTakerFeeExponent = entry.value("polymarketTakerFeeExponent", 1.0);
         pair.isManual = entry.value("isManual", false);
+        pair.noResultProbability = entry.value("noResultProbability", 0.0);
+        pair.polymarketYesNoResultValue = entry.value("polymarketYesNoResultValue", 0.0);
+        pair.polymarketNoNoResultValue = entry.value("polymarketNoNoResultValue", 0.0);
         pairs.push_back(std::move(pair));
     }
     return pairs;

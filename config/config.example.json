@@ -62,7 +62,9 @@
     "matchedPairsPath": "data/matched_pairs.json",
     "entitiesPath": "config/entities.json",
     "sharedTeamBonus": 0.25,
-    "excludedKalshiTickerPrefixes": ["KXCS2", "KXDOTA2", "KXCODGAME", "KXR6GAME", "KXLOL", "KXVALORANT"]
+    "excludedKalshiTickerPrefixes": ["KXCS2", "KXDOTA2", "KXCODGAME", "KXR6GAME", "KXLOL", "KXVALORANT"],
+    "defaultNoResultProbability": 0.005,
+    "noResultProbabilityByKalshiPrefix": {"KXATP": 0.02, "KXWTA": 0.02, "KXITF": 0.03}
   },
   "arbitrage": {
     "minimumEdgeTicks": 5,

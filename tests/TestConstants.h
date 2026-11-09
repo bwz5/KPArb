@@ -54,6 +54,11 @@ inline constexpr Ticks slightlyCheapKalshiAsk = 495;
 inline constexpr Ticks unsynchronizedAsk = 100;
 inline constexpr Ticks expensiveAsk = 900;
 inline constexpr Ticks queuedAsk = 300;
+inline constexpr Ticks riskyKalshiAsk = 400;
+inline constexpr Ticks riskyPolymarketAsk = 590;
+inline constexpr Ticks tokenWorthlessOnNoResult = 0;
+inline constexpr Ticks tokenWorthDollarOnNoResult = 1000;
+inline constexpr std::uint16_t tennisRiskBasisPoints = 200;
 
 inline constexpr std::int32_t standardQuantity = 100;
 inline constexpr std::int32_t largeQuantity = 1000;
@@ -350,6 +355,7 @@ inline constexpr std::size_t noSharedEntities = 0;
 inline constexpr std::size_t bothEntitiesShared = 2;
 inline constexpr double pointsPropLine = 9.5;
 inline constexpr std::size_t testMarketCount = 3;
+inline constexpr double fiftyFiftyNoResultValue = 0.5;
 inline constexpr std::size_t confirmedPairCount = 2;
 inline constexpr int requestsAfterManualExclusion = 2;
 inline constexpr int requestsWithOneRetry = 4;
@@ -382,6 +388,12 @@ inline constexpr std::size_t firstKalshiMarket = 0;
 inline constexpr std::size_t nextDayKalshiMarket = 2;
 inline constexpr std::size_t sameDayPolymarketMarket = 0;
 inline constexpr std::size_t nextDayPolymarketMarket = 1;
+}
+
+namespace settlement_test {
+inline constexpr double fiftyFiftyValue = 0.5;
+inline constexpr double worthlessOnNoResult = 0.0;
+inline constexpr double fullValueOnNoResult = 1.0;
 }
 
 namespace entity_directory_test {

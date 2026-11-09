@@ -42,6 +42,10 @@ public:
 
     bool assignPolymarketFeeSchedule(std::uint32_t pairIndex, const FeeSchedule& schedule);
 
+    static constexpr std::uint32_t basisPointsPerUnit = 10'000;
+
+    bool assignNoResultRisk(std::uint32_t pairIndex, Ticks alignedTokenValue, Ticks oppositeTokenValue, std::uint16_t riskBasisPoints);
+
     void applyUpdate(const LadderUpdate& update) noexcept;
 
     template <bool usePrefetch>
@@ -109,6 +113,8 @@ private:
         std::array<Ticks, laddersPerPair> bestAskPrice{noPrice, noPrice, noPrice, noPrice};
         std::array<bool, 2> isOpportunityOpen{};
         std::uint8_t polymarketFeeScheduleIndex = 0;
+        std::array<Ticks, 2> polymarketNoResultValue{};
+        std::uint16_t noResultRiskBasisPoints = 0;
     };
 
     static_assert(sizeof(PairQuote) == 64);
@@ -143,8 +149,19 @@ private:
     void resetVenue(Venue venue, std::int64_t receivedAtNanos) noexcept;
     void refreshQuote(std::uint32_t ladderIndex, std::int64_t receivedAtNanos) noexcept;
     void evaluateDirection(std::uint32_t pairIndex, TradeDirection direction, std::int64_t nowNanos) noexcept;
-    DepthResult measureDepth(const AskLadder& kalshiLadder, const AskLadder& polymarketLadder,
-        const FeeSchedule& polymarketFees) const noexcept;
+    DepthResult measureDepth(const AskLadder& kalshiLadder, const AskLadder& polymarketLadder, const FeeSchedule& polymarketFees,
+        const PairQuote& quote, std::size_t directionIndex) const noexcept;
+
+    std::int32_t requiredEdgeAt(const PairQuote& quote, std::size_t directionIndex, Ticks polymarketPrice) const noexcept
+    {
+        const std::int32_t exposedTicks = static_cast<std::int32_t>(polymarketPrice) - quote.polymarketNoResultValue[directionIndex];
+        if (quote.noResultRiskBasisPoints == 0 || exposedTicks <= 0) [[likely]] {
+            return settings.minimumEdgeTicks;
+        }
+        const std::int32_t penalty = (exposedTicks * quote.noResultRiskBasisPoints + static_cast<std::int32_t>(basisPointsPerUnit) - 1)
+            / static_cast<std::int32_t>(basisPointsPerUnit);
+        return settings.minimumEdgeTicks + penalty;
+    }
 
     std::int32_t edgeAt(Ticks kalshiPrice, Ticks polymarketPrice, const FeeSchedule& polymarketFees) const noexcept
     {

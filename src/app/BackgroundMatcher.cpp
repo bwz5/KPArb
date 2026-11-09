@@ -129,7 +129,7 @@ void BackgroundMatcher::run()
         std::cout << "matching finished: candidates=" << summary.candidatesTotal << " processed=" << summary.candidatesProcessed
                   << " language model requests=" << summary.languageModelRequests << " accepted pairs=" << acceptedPairCount()
                   << " polarity corrections=" << summary.polarityCorrections << " entity rule matches=" << summary.entityRuleMatches
-                  << " excluded by series=" << summary.excludedBySeries << '\n';
+                  << " excluded by series=" << summary.excludedBySeries << " settlement conflicts=" << summary.settlementConflicts << '\n';
         if (summary.isLanguageModelDisabled) {
             std::cout << "language model was disabled for this cycle after " << config.matcher.maximumConsecutiveFailures
                       << " consecutive failures; the next cycle will retry\n";

@@ -27,6 +27,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <ctime>
 #include <fstream>
 #include <iostream>
@@ -492,6 +493,10 @@ StreamOutcome Application::streamAndDetect(const std::vector<MatchedPair>& pairs
             }
             ++pairsWithPolymarketFees;
         }
+        const double alignedValue = pair.isInverted ? pair.polymarketNoNoResultValue : pair.polymarketYesNoResultValue;
+        const double oppositeValue = pair.isInverted ? pair.polymarketYesNoResultValue : pair.polymarketNoNoResultValue;
+        engine->assignNoResultRisk(pairIndex, dollarsToTicks(alignedValue), dollarsToTicks(oppositeValue),
+            static_cast<std::uint16_t>(std::lround(std::clamp(pair.noResultProbability, 0.0, 1.0) * ArbitrageEngine::basisPointsPerUnit)));
     }
 
     auto kalshiQueue = std::make_unique<LadderUpdateQueue>();

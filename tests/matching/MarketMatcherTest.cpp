@@ -162,6 +162,34 @@ TEST_F(MarketMatcherTest, EntityResolvedMoneylinesSkipTheLanguageModel)
     EXPECT_EQ(store->findVerdict(kalshiGame.identifier, polymarketGame.identifier)->model, "entity-rule");
 }
 
+TEST_F(MarketMatcherTest, SettlementConflictsAreRejectedAndNoResultRiskIsPriced)
+{
+    store->load();
+    MarketInfo kalshiGame = market(Venue::Kalshi, "KXNCAAMBGAME-26NOV05PENNILL-ILL", "Illinois Fighting Illini wins");
+    kalshiGame.eventIdentifier = "KXNCAAMBGAME-26NOV05PENNILL";
+    kalshiGame.teamKeys = {"cbb:ILL", "cbb:PENN"};
+    kalshiGame.subjectTeamKey = "cbb:ILL";
+    kalshiGame.rules = "If the game is cancelled or not started within 48 hours, both markets will resolve to a fair price.";
+    MarketInfo polymarketGame = market(Venue::Polymarket, "0xgame", "Penn Quakers vs. Illinois Fighting Illini");
+    polymarketGame.eventIdentifier = "cbb-penn-ill-2026-11-05";
+    polymarketGame.teamKeys = {"cbb:ILL", "cbb:PENN"};
+    polymarketGame.yesOutcomeEntityKey = "cbb:PENN";
+    polymarketGame.noOutcomeEntityKey = "cbb:ILL";
+    polymarketGame.rules = "If the game is canceled, this market will resolve 50-50.";
+    settings.candidates.minimumSimilarity = noSimilarityRequired;
+    {
+        MarketMatcher matcher(settings, model, *store, *channel);
+        const auto pairs = matcher.match({kalshiGame}, {polymarketGame});
+        ASSERT_EQ(pairs.size(), 1U);
+        EXPECT_DOUBLE_EQ(pairs[0].noResultProbability, settings.defaultNoResultProbability);
+        EXPECT_DOUBLE_EQ(pairs[0].polymarketYesNoResultValue, fiftyFiftyNoResultValue);
+    }
+    polymarketGame.title = "Penn Quakers vs. Illinois Fighting Illini - 1st Half Winner";
+    MarketMatcher matcher(settings, model, *store, *channel);
+    EXPECT_TRUE(matcher.match({kalshiGame}, {polymarketGame}).empty());
+    EXPECT_EQ(matcher.lastProgress().settlementConflicts, 1U);
+}
+
 TEST_F(MarketMatcherTest, ExcludedSeriesAreNeverMatched)
 {
     store->load();

@@ -2,6 +2,7 @@
 
 #include "common/Clock.h"
 #include "matching/EntityMatchRule.h"
+#include "matching/SettlementTerms.h"
 
 #include <nlohmann/json.hpp>
 
@@ -194,10 +195,15 @@ void MarketMatcher::acceptIfMatched(MatchRun& run, const CandidatePair& candidat
     const MarketInfo& polymarketMarket = run.polymarketMarkets[candidate.polymarketIndex];
     const EntityPolarity polarity = entityPolarity(kalshiMarket, polymarketMarket);
     const bool isInverted = polarity == EntityPolarity::Unknown ? verdict.isInverted : polarity == EntityPolarity::Inverted;
-    if (verdict.isSameEvent && verdict.confidence >= settings.minimumConfidence && polarity != EntityPolarity::Conflicting
-        && !haveConflictingDates(kalshiMarket, polymarketMarket)
-        && run.accepted.emplace(kalshiMarket.identifier, polymarketMarket.identifier).second) {
+    const bool isPlausibleMatch = verdict.isSameEvent && verdict.confidence >= settings.minimumConfidence
+        && polarity != EntityPolarity::Conflicting && !haveConflictingDates(kalshiMarket, polymarketMarket);
+    const bool hasCompatibleSettlement = !isPlausibleMatch || compareSettlementTerms(kalshiMarket, polymarketMarket).isCompatible;
+    if (!hasCompatibleSettlement) {
+        ++progress.settlementConflicts;
+    }
+    if (isPlausibleMatch && hasCompatibleSettlement && run.accepted.emplace(kalshiMarket.identifier, polymarketMarket.identifier).second) {
         run.pairs.push_back(makePair(kalshiMarket, polymarketMarket, isInverted, verdict.confidence));
+        priceNoResultRisk(run.pairs.back(), kalshiMarket, polymarketMarket);
         if (isInverted != verdict.isInverted) {
             ++progress.polarityCorrections;
         }
@@ -297,6 +303,27 @@ void MarketMatcher::processPendingCandidates(MatchRun& run, const std::vector<st
     }
 }
 
+double MarketMatcher::noResultProbabilityFor(const std::string& kalshiTicker) const noexcept
+{
+    double probability = settings.defaultNoResultProbability;
+    std::size_t longestPrefix = 0;
+    for (const auto& [prefix, prefixProbability] : settings.noResultProbabilityByKalshiPrefix) {
+        if (prefix.size() > longestPrefix && kalshiTicker.starts_with(prefix)) {
+            probability = prefixProbability;
+            longestPrefix = prefix.size();
+        }
+    }
+    return probability;
+}
+
+void MarketMatcher::priceNoResultRisk(MatchedPair& pair, const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) const
+{
+    const SettlementComparison comparison = compareSettlementTerms(kalshiMarket, polymarketMarket);
+    pair.noResultProbability = comparison.carriesNoResultRisk ? noResultProbabilityFor(kalshiMarket.identifier) : 0.0;
+    pair.polymarketYesNoResultValue = comparison.polymarketYesNoResultValue;
+    pair.polymarketNoNoResultValue = comparison.polymarketNoNoResultValue;
+}
+
 bool MarketMatcher::isExcludedSeries(const std::string& kalshiTicker) const noexcept
 {
     return std::any_of(settings.excludedKalshiTickerPrefixes.begin(), settings.excludedKalshiTickerPrefixes.end(),
@@ -377,6 +404,7 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
         if (accepted.emplace(manual.kalshiTicker, manual.polymarketIdentifier).second) {
             MatchedPair pair = makePair(*kalshiMarket->second, *polymarketMarket->second, manual.isInverted, 1.0);
             pair.isManual = true;
+            priceNoResultRisk(pair, *kalshiMarket->second, *polymarketMarket->second);
             pairs.push_back(std::move(pair));
             if (onPairAccepted) {
                 onPairAccepted(pairs.back());

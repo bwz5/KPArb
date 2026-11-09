@@ -30,6 +30,12 @@ constexpr double ticksToDollars(std::int64_t ticks) noexcept
     return static_cast<double>(ticks) / static_cast<double>(ticksPerDollar);
 }
 
+constexpr Ticks dollarsToTicks(double dollars) noexcept
+{
+    const double clamped = dollars < 0.0 ? 0.0 : (dollars > 1.0 ? 1.0 : dollars);
+    return static_cast<Ticks>(clamped * static_cast<double>(ticksPerDollar) + 0.5);
+}
+
 constexpr double quantityToContracts(std::int64_t quantity) noexcept
 {
     return static_cast<double>(quantity) / static_cast<double>(quantityUnitsPerContract);

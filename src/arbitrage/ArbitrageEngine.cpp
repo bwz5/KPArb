@@ -81,6 +81,18 @@ bool ArbitrageEngine::assignPolymarketFeeSchedule(std::uint32_t pairIndex, const
     return true;
 }
 
+bool ArbitrageEngine::assignNoResultRisk(std::uint32_t pairIndex, Ticks alignedTokenValue, Ticks oppositeTokenValue, std::uint16_t riskBasisPoints)
+{
+    if (pairIndex >= totalPairs || alignedTokenValue > ticksPerDollar || oppositeTokenValue > ticksPerDollar || riskBasisPoints > basisPointsPerUnit) {
+        return false;
+    }
+    PairQuote& quote = pairQuotes[pairIndex];
+    quote.polymarketNoResultValue[static_cast<std::size_t>(TradeDirection::BuyKalshiYesBuyPolymarketNo)] = oppositeTokenValue;
+    quote.polymarketNoResultValue[static_cast<std::size_t>(TradeDirection::BuyKalshiNoBuyPolymarketYes)] = alignedTokenValue;
+    quote.noResultRiskBasisPoints = riskBasisPoints;
+    return true;
+}
+
 void ArbitrageEngine::applyUpdate(const LadderUpdate& update) noexcept
 {
     if (update.kind == UpdateKind::ResetVenue) {
@@ -164,7 +176,7 @@ void ArbitrageEngine::evaluateDirection(std::uint32_t pairIndex, TradeDirection 
     const FeeSchedule& polymarketFees = polymarketFeeSchedules[quote.polymarketFeeScheduleIndex];
 
     bool isProfitable = kalshiPrice != noPrice && polymarketPrice != noPrice
-        && edgeAt(kalshiPrice, polymarketPrice, polymarketFees) >= settings.minimumEdgeTicks;
+        && edgeAt(kalshiPrice, polymarketPrice, polymarketFees) >= requiredEdgeAt(quote, directionIndex, polymarketPrice);
     if (isProfitable && settings.maximumQuoteAgeNanos > 0) {
         const std::int64_t oldestAllowed = nowNanos - settings.maximumQuoteAgeNanos;
         isProfitable = quote.lastUpdateNanos[kalshiSlot] >= oldestAllowed
@@ -188,7 +200,8 @@ void ArbitrageEngine::evaluateDirection(std::uint32_t pairIndex, TradeDirection 
     }
 
     const std::uint32_t pairLadderBase = pairIndex * laddersPerPair;
-    const DepthResult depth = measureDepth(ladders[pairLadderBase + kalshiSlot], ladders[pairLadderBase + polymarketSlot], polymarketFees);
+    const DepthResult depth
+        = measureDepth(ladders[pairLadderBase + kalshiSlot], ladders[pairLadderBase + polymarketSlot], polymarketFees, quote, directionIndex);
     const auto executableQuantity = static_cast<std::uint32_t>(
         depth.executableQuantity > std::numeric_limits<std::uint32_t>::max() ? std::numeric_limits<std::uint32_t>::max()
                                                                             : depth.executableQuantity);
@@ -224,7 +237,7 @@ void ArbitrageEngine::evaluateDirection(std::uint32_t pairIndex, TradeDirection 
 }
 
 ArbitrageEngine::DepthResult ArbitrageEngine::measureDepth(const AskLadder& kalshiLadder, const AskLadder& polymarketLadder,
-    const FeeSchedule& polymarketFees) const noexcept
+    const FeeSchedule& polymarketFees, const PairQuote& quote, std::size_t directionIndex) const noexcept
 {
     DepthResult result;
     Ticks kalshiPrice = kalshiLadder.bestPrice();
@@ -235,7 +248,7 @@ ArbitrageEngine::DepthResult ArbitrageEngine::measureDepth(const AskLadder& kals
 
     while (kalshiPrice != noPrice && polymarketPrice != noPrice && levels < settings.maximumDepthLevels) {
         const std::int32_t edge = edgeAt(kalshiPrice, polymarketPrice, polymarketFees);
-        if (edge < settings.minimumEdgeTicks) {
+        if (edge < requiredEdgeAt(quote, directionIndex, polymarketPrice)) {
             break;
         }
         const Quantity taken = kalshiRemaining < polymarketRemaining ? kalshiRemaining : polymarketRemaining;

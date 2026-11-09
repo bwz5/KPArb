@@ -27,6 +27,9 @@ struct MatchedPair {
     double polymarketTakerFeeRate = 0.0;
     double polymarketTakerFeeExponent = 1.0;
     bool isManual = false;
+    double noResultProbability = 0.0;
+    double polymarketYesNoResultValue = 0.0;
+    double polymarketNoNoResultValue = 0.0;
 };
 
 }

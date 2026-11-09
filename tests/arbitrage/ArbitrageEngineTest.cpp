@@ -84,6 +84,20 @@ TEST_F(ArbitrageEngineTest, DetectsKalshiYesPolymarketNoOpportunity)
     EXPECT_FALSE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiNoBuyPolymarketYes));
 }
 
+TEST_F(ArbitrageEngineTest, NoResultRiskRaisesTheEdgeRequiredOnTheExposedLeg)
+{
+    createEngine(1);
+    ASSERT_TRUE(engine->assignNoResultRisk(firstPair, tokenWorthDollarOnNoResult, tokenWorthlessOnNoResult, tennisRiskBasisPoints));
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, riskyKalshiAsk, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, riskyPolymarketAsk, standardQuantity);
+    EXPECT_FALSE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiYesBuyPolymarketNo));
+    setLevel(firstPair, LadderSlot::KalshiBuyNo, riskyKalshiAsk, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyYes, riskyPolymarketAsk, standardQuantity);
+    EXPECT_TRUE(engine->isOpportunityOpen(firstPair, TradeDirection::BuyKalshiNoBuyPolymarketYes));
+    EXPECT_FALSE(engine->assignNoResultRisk(pairOutsideEngine, tokenWorthlessOnNoResult, tokenWorthlessOnNoResult, tennisRiskBasisPoints));
+}
+
 TEST_F(ArbitrageEngineTest, DetectsKalshiNoPolymarketYesOpportunity)
 {
     createEngine(1);

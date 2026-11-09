@@ -4,6 +4,7 @@ add_library(kparb_matching STATIC
     ChatCompletionsClient.cpp
     MarketMatcher.cpp
     MatchStore.cpp
+    SettlementTerms.cpp
     TextNormalizer.cpp
 )
 target_link_libraries(kparb_matching
