@@ -6,6 +6,9 @@
 #include "common/Clock.h"
 #include "common/EnvironmentFile.h"
 #include "common/TimeParsing.h"
+#include "execution/KalshiOrderClient.h"
+#include "execution/PaperOrderClient.h"
+#include "execution/TradeExecutor.h"
 #include "ingestion/EntityDirectory.h"
 #include "ingestion/HttpClient.h"
 #include "ingestion/KalshiBookFeed.h"
@@ -168,6 +171,10 @@ int Application::run(const std::atomic<bool>& shutdownRequested)
     const auto overallDeadline = options.durationSeconds > 0 ? Clock::now() + std::chrono::seconds(options.durationSeconds)
                                                              : Clock::time_point::max();
     int exitCode = 0;
+    if (!prepareExecution()) {
+        logger.stop();
+        return 2;
+    }
     try {
         switch (options.mode) {
         case RunMode::TradeSavedPairs:
@@ -369,6 +376,39 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
     return exitCode >= 0 ? exitCode : 0;
 }
 
+bool Application::prepareExecution()
+{
+    if (config.execution.mode == ExecutionMode::Disabled) {
+        return true;
+    }
+    if (config.execution.mode == ExecutionMode::Live) {
+        std::cerr << "execution.mode=live needs a live Polymarket order client, which is not built yet; use paper\n";
+        return false;
+    }
+    exposure = std::make_unique<ExposureBook>(config.execution.risk);
+    std::cout << "paper execution on: $" << config.execution.risk.maximumDollarsPerTrade << " per trade, $"
+              << config.execution.risk.kalshiBudgetDollars << " Kalshi and $" << config.execution.risk.polymarketBudgetDollars
+              << " Polymarket every " << config.execution.risk.rebalanceHours << "h, journal " << config.execution.journalPath.string()
+              << ", kill switch " << config.execution.risk.killSwitchPath.string() << '\n';
+    const auto keyIdentifier = readEnvironmentVariable(config.kalshiKeyIdentifierVariable);
+    const std::string privateKeyPem = readKalshiPrivateKey(config);
+    if (keyIdentifier && !privateKeyPem.empty()) {
+        try {
+            const KalshiSigner signer = KalshiSigner::fromPem(privateKeyPem);
+            HttpClient httpClient;
+            KalshiOrderClient kalshiOrders(config.kalshiCatalog.restBaseUrl, *keyIdentifier, signer, httpClient);
+            if (const auto balance = kalshiOrders.fetchBalanceCents()) {
+                std::cout << "kalshi order api reachable, balance $" << static_cast<double>(*balance) / 100.0 << '\n';
+            } else {
+                std::cout << "kalshi order api did not return a balance; live orders would fail with these credentials\n";
+            }
+        } catch (const std::exception& error) {
+            std::cout << "kalshi order api check failed: " << error.what() << '\n';
+        }
+    }
+    return true;
+}
+
 std::optional<DiscoveredMarkets> Application::discoverMarketsUntilAvailable(LogChannel& applicationChannel,
     Clock::time_point overallDeadline, const std::atomic<bool>& shutdownRequested)
 {
@@ -512,11 +552,33 @@ StreamOutcome Application::streamAndDetect(const std::vector<MatchedPair>& pairs
               << " with polymarket fees), kalshi key " << (signer.scheme() == SignatureScheme::Ed25519 ? "ed25519" : "rsa-pss")
               << ", minimum edge " << config.engine.minimumEdgeTicks << " ticks\n";
 
+    std::unique_ptr<ExecutionSignalQueue> signalQueue;
+    PaperOrderClient paperKalshiOrders;
+    PaperOrderClient paperPolymarketOrders;
+    std::unique_ptr<TradeExecutor> executor;
+    if (exposure) {
+        std::vector<PairRoute> routes;
+        routes.reserve(pairs.size());
+        for (const MatchedPair& pair : pairs) {
+            routes.push_back(PairRoute{
+                pair.kalshiTicker,
+                pair.isInverted ? pair.polymarketNoToken : pair.polymarketYesToken,
+                pair.isInverted ? pair.polymarketYesToken : pair.polymarketNoToken,
+            });
+        }
+        signalQueue = std::make_unique<ExecutionSignalQueue>();
+        engine->attachExecutionQueue(signalQueue.get());
+        executor = std::make_unique<TradeExecutor>(config.execution, std::move(routes), paperKalshiOrders, paperPolymarketOrders, *exposure);
+    }
+
     std::atomic<bool> engineStopRequested{false};
     std::thread engineThread([&] {
         elevateCurrentThreadPriority();
         engine->run(*kalshiQueue, *polymarketQueue, engineStopRequested);
     });
+    if (executor) {
+        executor->start(*signalQueue);
+    }
     kalshiFeed.start();
     polymarketFeed.start();
 
@@ -539,6 +601,16 @@ StreamOutcome Application::streamAndDetect(const std::vector<MatchedPair>& pairs
     polymarketFeed.stop();
     engineStopRequested.store(true, std::memory_order_release);
     engineThread.join();
+    if (executor) {
+        executor->stop();
+        const ExecutorCounters& executed = executor->counters();
+        std::cout << "paper execution: signals=" << executed.signalsReceived << " trades=" << executed.tradesAttempted
+                  << " hedged=" << executed.fullyHedged << " chased=" << executed.chased << " unwound=" << executed.unwound
+                  << " unhedged=" << executed.leftUnhedged << " stale=" << executed.staleSignals << " blocked by risk="
+                  << executed.blockedByRisk << " dropped signals=" << engine->droppedExecutionSignals() << " kalshi spent=$"
+                  << exposure->kalshiSpent() << " polymarket spent=$" << exposure->polymarketSpent()
+                  << (exposure->haltReason().empty() ? std::string() : " HALTED: " + exposure->haltReason()) << '\n';
+    }
 
     const EngineCounters& counters = engine->counters();
     std::cout << "session summary: updates applied=" << counters.updatesApplied << " evaluations=" << counters.pairEvaluations

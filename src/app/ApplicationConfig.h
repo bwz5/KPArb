@@ -1,6 +1,7 @@
 #pragma once
 
 #include "arbitrage/ArbitrageEngine.h"
+#include "execution/TradeExecutor.h"
 #include "ingestion/KalshiBookFeed.h"
 #include "ingestion/KalshiMarketCatalog.h"
 #include "ingestion/PolymarketBookFeed.h"
@@ -42,6 +43,8 @@ struct ApplicationConfig {
     EngineSettings engine;
     double kalshiTakerFeeRate = 0.07;
     std::size_t maximumPairs = 5000;
+
+    ExecutionSettings execution;
 
     std::filesystem::path logDirectory = "data/logs";
     bool printFeedEvents = true;

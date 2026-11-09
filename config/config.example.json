@@ -73,6 +73,22 @@
     "statsIntervalSeconds": 10,
     "maximumPairs": 5000
   },
+  "execution": {
+    "mode": "disabled",
+    "maximumDollarsPerTrade": 10,
+    "maximumContractsPerTrade": 100,
+    "maximumDollarsPerPair": 50,
+    "kalshiBudgetDollars": 250,
+    "polymarketBudgetDollars": 250,
+    "rebalanceHours": 48,
+    "maximumLossDollars": 25,
+    "killSwitchPath": "data/KILL",
+    "journalPath": "data/executions.jsonl",
+    "maximumSignalAgeMilliseconds": 500,
+    "firstLeg": "thinner",
+    "chaseTicks": 5,
+    "unwindSlippageTicks": 20
+  },
   "logging": {
     "directory": "data/logs",
     "printFeedEvents": true,

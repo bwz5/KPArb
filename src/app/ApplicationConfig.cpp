@@ -120,6 +120,44 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     config.engine.statsIntervalNanos = statsIntervalSeconds * 1'000'000'000;
     readInto(arbitrage, "maximumPairs", config.maximumPairs);
 
+    const auto execution = sectionOf(document, "execution");
+    std::string executionMode = "disabled";
+    readInto(execution, "mode", executionMode);
+    if (executionMode == "paper") {
+        config.execution.mode = ExecutionMode::Paper;
+    } else if (executionMode == "live") {
+        config.execution.mode = ExecutionMode::Live;
+    } else if (executionMode == "disabled") {
+        config.execution.mode = ExecutionMode::Disabled;
+    } else {
+        throw std::runtime_error("execution.mode must be disabled, paper or live");
+    }
+    readInto(execution, "maximumDollarsPerTrade", config.execution.risk.maximumDollarsPerTrade);
+    readInto(execution, "maximumContractsPerTrade", config.execution.risk.maximumContractsPerTrade);
+    readInto(execution, "maximumDollarsPerPair", config.execution.risk.maximumDollarsPerPair);
+    readInto(execution, "kalshiBudgetDollars", config.execution.risk.kalshiBudgetDollars);
+    readInto(execution, "polymarketBudgetDollars", config.execution.risk.polymarketBudgetDollars);
+    readInto(execution, "rebalanceHours", config.execution.risk.rebalanceHours);
+    readInto(execution, "maximumLossDollars", config.execution.risk.maximumLossDollars);
+    readPathInto(execution, "killSwitchPath", config.execution.risk.killSwitchPath);
+    readPathInto(execution, "journalPath", config.execution.journalPath);
+    readInto(execution, "chaseTicks", config.execution.planner.chaseTicks);
+    readInto(execution, "unwindSlippageTicks", config.execution.planner.unwindSlippageTicks);
+    std::int64_t maximumSignalAgeMilliseconds = config.execution.maximumSignalAgeNanos / 1'000'000;
+    readInto(execution, "maximumSignalAgeMilliseconds", maximumSignalAgeMilliseconds);
+    config.execution.maximumSignalAgeNanos = maximumSignalAgeMilliseconds * 1'000'000;
+    std::string firstLeg = "thinner";
+    readInto(execution, "firstLeg", firstLeg);
+    if (firstLeg == "kalshi") {
+        config.execution.planner.firstLeg = FirstLegPolicy::KalshiFirst;
+    } else if (firstLeg == "polymarket") {
+        config.execution.planner.firstLeg = FirstLegPolicy::PolymarketFirst;
+    } else if (firstLeg == "thinner") {
+        config.execution.planner.firstLeg = FirstLegPolicy::ThinnerBookFirst;
+    } else {
+        throw std::runtime_error("execution.firstLeg must be thinner, kalshi or polymarket");
+    }
+
     const auto discovery = sectionOf(document, "discovery");
     readInto(discovery, "maximumDaysUntilResolution", config.maximumDaysUntilResolution);
     readInto(discovery, "kalshiCloseTimeSearchDays", config.kalshiCloseTimeSearchDays);

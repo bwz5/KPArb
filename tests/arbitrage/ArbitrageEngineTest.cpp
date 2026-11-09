@@ -98,6 +98,31 @@ TEST_F(ArbitrageEngineTest, NoResultRiskRaisesTheEdgeRequiredOnTheExposedLeg)
     EXPECT_FALSE(engine->assignNoResultRisk(pairOutsideEngine, tokenWorthlessOnNoResult, tokenWorthlessOnNoResult, tennisRiskBasisPoints));
 }
 
+TEST_F(ArbitrageEngineTest, PublishesExecutionSignalsWithOppositeAsks)
+{
+    createEngine(1);
+    auto signals = std::make_unique<ExecutionSignalQueue>();
+    engine->attachExecutionQueue(signals.get());
+    synchronizeAll(firstPair);
+    setLevel(firstPair, LadderSlot::KalshiBuyNo, overpricedKalshiNoAsk, standardQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyYes, expensiveAsk, standardQuantity);
+    setLevel(firstPair, LadderSlot::KalshiBuyYes, discountedKalshiAsk, largeQuantity);
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fiftyCents, partialQuantity);
+    ExecutionSignal opened;
+    ASSERT_TRUE(signals->tryPop(opened));
+    EXPECT_EQ(opened.kind, SignalKind::Opened);
+    EXPECT_EQ(opened.direction, TradeDirection::BuyKalshiYesBuyPolymarketNo);
+    EXPECT_EQ(opened.kalshiOppositeAsk, overpricedKalshiNoAsk);
+    EXPECT_EQ(opened.polymarketOppositeAsk, expensiveAsk);
+    EXPECT_EQ(opened.kalshiTopQuantity, static_cast<std::uint32_t>(largeQuantity));
+    EXPECT_EQ(opened.polymarketTopQuantity, static_cast<std::uint32_t>(partialQuantity));
+    setLevel(firstPair, LadderSlot::PolymarketBuyNo, fiftyCents, 0);
+    ExecutionSignal closed;
+    ASSERT_TRUE(signals->tryPop(closed));
+    EXPECT_EQ(closed.kind, SignalKind::Closed);
+    EXPECT_EQ(engine->droppedExecutionSignals(), 0U);
+}
+
 TEST_F(ArbitrageEngineTest, DetectsKalshiNoPolymarketYesOpportunity)
 {
     createEngine(1);

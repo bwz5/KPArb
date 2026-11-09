@@ -1,6 +1,7 @@
 #pragma once
 
 #include "arbitrage/AskLadder.h"
+#include "arbitrage/ExecutionSignal.h"
 #include "arbitrage/FeeSchedule.h"
 #include "arbitrage/LadderUpdate.h"
 #include "common/Prefetch.h"
@@ -45,6 +46,16 @@ public:
     static constexpr std::uint32_t basisPointsPerUnit = 10'000;
 
     bool assignNoResultRisk(std::uint32_t pairIndex, Ticks alignedTokenValue, Ticks oppositeTokenValue, std::uint16_t riskBasisPoints);
+
+    void attachExecutionQueue(ExecutionSignalQueue* queue) noexcept
+    {
+        executionQueue = queue;
+    }
+
+    std::uint64_t droppedExecutionSignals() const noexcept
+    {
+        return droppedSignals;
+    }
 
     void applyUpdate(const LadderUpdate& update) noexcept;
 
@@ -147,6 +158,12 @@ private:
     }
 
     void resetVenue(Venue venue, std::int64_t receivedAtNanos) noexcept;
+    void publishSignal(const ExecutionSignal& signal) noexcept
+    {
+        if (executionQueue != nullptr && !executionQueue->tryPush(signal)) [[unlikely]] {
+            ++droppedSignals;
+        }
+    }
     void refreshQuote(std::uint32_t ladderIndex, std::int64_t receivedAtNanos) noexcept;
     void evaluateDirection(std::uint32_t pairIndex, TradeDirection direction, std::int64_t nowNanos) noexcept;
     DepthResult measureDepth(const AskLadder& kalshiLadder, const AskLadder& polymarketLadder, const FeeSchedule& polymarketFees,
@@ -178,6 +195,8 @@ private:
     std::vector<AskLadder> ladders;
     std::vector<PairQuote> pairQuotes;
     std::vector<OpportunityState> opportunityStates;
+    ExecutionSignalQueue* executionQueue = nullptr;
+    std::uint64_t droppedSignals = 0;
 };
 
 }

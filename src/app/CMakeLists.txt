@@ -5,7 +5,7 @@ add_library(kparb_application STATIC
     MatchedPairFile.cpp
 )
 target_link_libraries(kparb_application
-    PUBLIC kparb_common kparb_logging kparb_arbitrage kparb_ingestion kparb_matching
+    PUBLIC kparb_common kparb_logging kparb_arbitrage kparb_ingestion kparb_matching kparb_execution
     PRIVATE nlohmann_json::nlohmann_json
 )
 

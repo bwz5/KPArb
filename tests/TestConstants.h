@@ -390,6 +390,30 @@ inline constexpr std::size_t sameDayPolymarketMarket = 0;
 inline constexpr std::size_t nextDayPolymarketMarket = 1;
 }
 
+namespace execution_test {
+inline constexpr std::int64_t signalTimeNanos = 1'000'000'000;
+inline constexpr std::uint32_t signalContracts = 10;
+inline constexpr std::uint32_t thinBookQuantity = 1'500;
+inline constexpr std::uint32_t deepBookQuantity = 90'000;
+inline constexpr Ticks kalshiAsk = 450;
+inline constexpr Ticks polymarketAsk = 530;
+inline constexpr Ticks kalshiOppositeAsk = 560;
+inline constexpr Ticks polymarketOppositeAsk = 480;
+inline constexpr std::int16_t signalEdge = 20;
+inline constexpr Ticks subCentAsk = 455;
+inline constexpr std::uint32_t hedgedContracts = 4;
+inline constexpr std::uint32_t chasedContracts = 2;
+inline constexpr std::uint32_t unwindableContracts = 4;
+inline constexpr std::uint32_t noFill = 0;
+inline constexpr std::uint32_t partialKalshiFill = 7;
+inline constexpr Ticks kalshiYesFillPrice = 440;
+inline constexpr double generousDollars = 1'000'000.0;
+inline constexpr double tinyTradeDollars = 5.0;
+inline constexpr std::uint32_t budgetContracts = 3;
+inline constexpr double dollarTolerance = 1e-9;
+inline constexpr double nanosPerHour = 3'600'000'000'000.0;
+}
+
 namespace settlement_test {
 inline constexpr double fiftyFiftyValue = 0.5;
 inline constexpr double worthlessOnNoResult = 0.0;

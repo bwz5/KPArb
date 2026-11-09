@@ -33,6 +33,11 @@ constexpr TradeDirection directionForSlot(std::uint32_t slot) noexcept
         : TradeDirection::BuyKalshiNoBuyPolymarketYes;
 }
 
+constexpr std::uint32_t oppositeSlotOf(std::uint32_t slot) noexcept
+{
+    return slot ^ 1U;
+}
+
 constexpr Ticks prefetchPriceAhead(Ticks price) noexcept
 {
     constexpr std::size_t levelsPerCacheLine = cacheLineSize / sizeof(Quantity);
@@ -194,6 +199,12 @@ void ArbitrageEngine::evaluateDirection(std::uint32_t pairIndex, TradeDirection 
             closed.pairIndex = pairIndex;
             closed.direction = direction;
             logChannel.write(closed);
+            ExecutionSignal signal;
+            signal.detectedAtNanos = nowNanos;
+            signal.pairIndex = pairIndex;
+            signal.direction = direction;
+            signal.kind = SignalKind::Closed;
+            publishSignal(signal);
             state = OpportunityState{};
         }
         return;
@@ -234,6 +245,27 @@ void ArbitrageEngine::evaluateDirection(std::uint32_t pairIndex, TradeDirection 
     opportunity.direction = direction;
     opportunity.levelsConsumed = depth.levelsConsumed;
     logChannel.write(opportunity);
+
+    if (executionQueue != nullptr) {
+        const AskLadder& kalshiLadder = ladders[pairLadderBase + kalshiSlot];
+        const AskLadder& polymarketLadder = ladders[pairLadderBase + polymarketSlot];
+        ExecutionSignal signal;
+        signal.detectedAtNanos = nowNanos;
+        signal.pairIndex = pairIndex;
+        signal.executableQuantity = executableQuantity;
+        signal.kalshiTopQuantity = kalshiLadder.bestQuantity();
+        signal.polymarketTopQuantity = polymarketLadder.bestQuantity();
+        signal.kalshiPrice = kalshiPrice;
+        signal.polymarketPrice = polymarketPrice;
+        signal.kalshiWorstPrice = depth.kalshiWorstPrice;
+        signal.polymarketWorstPrice = depth.polymarketWorstPrice;
+        signal.kalshiOppositeAsk = quote.bestAskPrice[oppositeSlotOf(kalshiSlot)];
+        signal.polymarketOppositeAsk = quote.bestAskPrice[oppositeSlotOf(polymarketSlot)];
+        signal.edgeTicks = opportunity.topEdgeTicks;
+        signal.direction = direction;
+        signal.kind = wasOpen ? SignalKind::Changed : SignalKind::Opened;
+        publishSignal(signal);
+    }
 }
 
 ArbitrageEngine::DepthResult ArbitrageEngine::measureDepth(const AskLadder& kalshiLadder, const AskLadder& polymarketLadder,

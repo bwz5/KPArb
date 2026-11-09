@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/ApplicationConfig.h"
+#include "execution/ExposureBook.h"
 #include "ingestion/MarketInfo.h"
 #include "logging/LogChannel.h"
 #include "matching/MatchedPair.h"
@@ -10,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -68,8 +70,11 @@ private:
     StreamOutcome streamAndDetect(const std::vector<MatchedPair>& pairs, LogChannels& channels,
         const std::function<bool()>& shouldEndSession, const std::atomic<bool>& shutdownRequested);
 
+    bool prepareExecution();
+
     ApplicationConfig config;
     RunOptions options;
+    std::unique_ptr<ExposureBook> exposure;
 };
 
 }
