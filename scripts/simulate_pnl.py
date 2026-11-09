@@ -131,18 +131,67 @@ def load_episodes(decoder, path):
     return [episode for episode in finished if episode.quotes]
 
 
-def simulate(episodes, delay_ns, settlements, now_ns, bankroll_dollars, maximum_trade_dollars):
+@dataclass
+class VenueCash:
+    rebalance_ns: int
+    next_rebalance_ns: int
+    balances: dict
+    settlements_due: list = field(default_factory=list)
+    transfers: list = field(default_factory=list)
+    limited_trades: int = 0
+    lowest_balance: float = float("inf")
+
+    def advance_to(self, time_ns):
+        while True:
+            next_settlement = self.settlements_due[0][0] if self.settlements_due else None
+            if next_settlement is not None and next_settlement <= time_ns and next_settlement <= self.next_rebalance_ns:
+                _, kalshi_credit, polymarket_credit = heapq.heappop(self.settlements_due)
+                self.balances["kalshi"] += kalshi_credit
+                self.balances["polymarket"] += polymarket_credit
+            elif self.next_rebalance_ns <= time_ns:
+                half = (self.balances["kalshi"] + self.balances["polymarket"]) / 2.0
+                self.transfers.append((self.next_rebalance_ns, abs(self.balances["kalshi"] - half)))
+                self.balances = {"kalshi": half, "polymarket": half}
+                self.next_rebalance_ns += self.rebalance_ns
+            else:
+                return
+
+    def affordable_contracts(self, kalshi_cost, polymarket_cost):
+        return min(self.balances["kalshi"] / kalshi_cost if kalshi_cost > 0 else float("inf"),
+                   self.balances["polymarket"] / polymarket_cost if polymarket_cost > 0 else float("inf"))
+
+    def spend(self, kalshi_dollars, polymarket_dollars):
+        self.balances["kalshi"] -= kalshi_dollars
+        self.balances["polymarket"] -= polymarket_dollars
+        self.lowest_balance = min(self.lowest_balance, self.balances["kalshi"], self.balances["polymarket"])
+
+
+def leg_costs(quote, profit_per_contract):
+    cost_per_contract = 1.0 - profit_per_contract
+    total_price = quote.kalshi_price + quote.polymarket_price
+    kalshi_share = quote.kalshi_price / total_price if total_price > 0 else 0.5
+    return cost_per_contract * kalshi_share, cost_per_contract * (1.0 - kalshi_share)
+
+
+def simulate(episodes, delay_ns, settlements, now_ns, bankroll_dollars, maximum_trade_dollars, rebalance_ns=0):
     trades = []
     taken_by_book = defaultdict(float)
     open_positions = []
     deployed = 0.0
-    for episode in sorted(episodes, key=lambda item: item.start_ns):
+    ordered = sorted(episodes, key=lambda item: item.start_ns)
+    venues = None
+    if bankroll_dollars > 0 and rebalance_ns > 0 and ordered:
+        venues = VenueCash(rebalance_ns, ordered[0].start_ns + rebalance_ns,
+                           {"kalshi": bankroll_dollars / 2.0, "polymarket": bankroll_dollars / 2.0})
+    for episode in ordered:
         decided = episode.start_ns + SNAPSHOT_SETTLE_NS
         arrival = decided + delay_ns
         if arrival > episode.end_ns:
             continue
         while open_positions and open_positions[0][0] <= arrival:
             deployed -= heapq.heappop(open_positions)[1]
+        if venues:
+            venues.advance_to(arrival)
         books = [("kalshi", episode.kalshi_ticker, episode.kalshi_side), ("polymarket", episode.polymarket_slug, episode.polymarket_outcome_index)]
         seen = episode.quote_at(decided)
         found = episode.quote_at(arrival)
@@ -153,7 +202,13 @@ def simulate(episodes, delay_ns, settlements, now_ns, bankroll_dollars, maximum_
         cost_per_contract = 1.0 - profit_per_contract
         if maximum_trade_dollars > 0:
             contracts = min(contracts, maximum_trade_dollars / cost_per_contract)
-        if bankroll_dollars > 0:
+        kalshi_cost, polymarket_cost = leg_costs(found, profit_per_contract)
+        if venues:
+            affordable = venues.affordable_contracts(kalshi_cost, polymarket_cost)
+            if affordable < contracts and int(affordable) < int(min(contracts, bankroll_dollars / cost_per_contract)):
+                venues.limited_trades += 1
+            contracts = min(contracts, affordable)
+        elif bankroll_dollars > 0:
             contracts = min(contracts, (bankroll_dollars - deployed) / cost_per_contract)
         whole_contracts = int(contracts)
         if whole_contracts < 1:
@@ -162,9 +217,14 @@ def simulate(episodes, delay_ns, settlements, now_ns, bankroll_dollars, maximum_
         trades.append(trade)
         for book in books:
             taken_by_book[book] += whole_contracts
-        heapq.heappush(open_positions, (settle(trade, settlements, now_ns)[1], trade.cost))
+        kalshi_value, polymarket_value, settled_ns = settle_legs(trade, settlements, now_ns)
+        heapq.heappush(open_positions, (settled_ns, trade.cost))
         deployed += trade.cost
-    return trades
+        if venues:
+            venues.spend(whole_contracts * kalshi_cost, whole_contracts * polymarket_cost)
+            if kalshi_value is not None:
+                heapq.heappush(venues.settlements_due, (settled_ns, whole_contracts * kalshi_value, whole_contracts * polymarket_value))
+    return trades, venues
 
 
 def fetch_json(url):
@@ -237,15 +297,22 @@ def load_settlements(episodes, cache_path):
     return cache
 
 
-def settle(trade, settlements, now_ns):
+def settle_legs(trade, settlements, now_ns):
     kalshi = settlements["kalshi"].get(trade.episode.kalshi_ticker, {})
     polymarket = settlements["polymarket"].get(trade.episode.polymarket_slug, {})
     settled_ns = max(value for value in (kalshi.get("settled_ns"), polymarket.get("settled_ns"), trade.time_ns) if value)
     if kalshi.get("yes_value") is None or polymarket.get("prices") is None:
-        return None, now_ns
+        return None, None, now_ns
     kalshi_value = kalshi["yes_value"] if trade.episode.kalshi_side == "yes" else 1.0 - kalshi["yes_value"]
     polymarket_value = polymarket["prices"][trade.episode.polymarket_outcome_index]
-    return kalshi_value + polymarket_value, max(settled_ns, trade.time_ns)
+    return kalshi_value, polymarket_value, max(settled_ns, trade.time_ns)
+
+
+def settle(trade, settlements, now_ns):
+    kalshi_value, polymarket_value, settled_ns = settle_legs(trade, settlements, now_ns)
+    if kalshi_value is None:
+        return None, now_ns
+    return kalshi_value + polymarket_value, settled_ns
 
 
 def peak_capital(intervals):
@@ -298,6 +365,8 @@ def main():
     parser.add_argument("--delays-ms", default="0,50,100,250,500,1000,2000,5000")
     parser.add_argument("--bankroll-dollars", type=float, default=0.0)
     parser.add_argument("--maximum-trade-dollars", type=float, default=0.0)
+    parser.add_argument("--rebalance-hours", type=float, default=48.0,
+                        help="with a bankroll, split it across the two venues and even them out this often (0 = one shared pool)")
     parser.add_argument("--exclude-series", default="", help="comma-separated Kalshi series prefixes to skip, e.g. KXCS2,KXDOTA2")
     parser.add_argument("--suspect-edge", type=float, default=0.20)
     parser.add_argument("--detail-delay-ms", type=int, default=250)
@@ -323,8 +392,10 @@ def main():
         delays.append(arguments.detail_delay_ms)
     settlements = load_settlements(episodes, os.path.join(arguments.output, "settlements.json"))
     now_ns = time.time_ns()
-    runs = {delay: simulate(episodes, delay * NANOS_PER_MILLISECOND, settlements, now_ns, arguments.bankroll_dollars,
-                            arguments.maximum_trade_dollars) for delay in delays}
+    rebalance_ns = int(arguments.rebalance_hours * 3600 * NANOS_PER_SECOND)
+    results = {delay: simulate(episodes, delay * NANOS_PER_MILLISECOND, settlements, now_ns, arguments.bankroll_dollars,
+                               arguments.maximum_trade_dollars, rebalance_ns) for delay in delays}
+    runs = {delay: result[0] for delay, result in results.items()}
 
     print(f"bankroll=${arguments.bankroll_dollars:g} maximum_trade=${arguments.maximum_trade_dollars:g} (0 = unlimited) "
           f"suspect_edge>={arguments.suspect_edge:.2f}")
@@ -347,6 +418,16 @@ def main():
                                  trade.episode.direction, trade.contracts, f"{trade.edge:.3f}", f"{trade.cost:.2f}",
                                  f"{trade.expected_profit:.2f}", "" if payout is None else f"{payout:.3f}",
                                  "" if realized is None else f"{realized:.2f}", int(suspect), trade.episode.log_file])
+
+    if any(result[1] for result in results.values()):
+        print(f"\nvenue cash, split evenly and rebalanced every {arguments.rebalance_hours:g} h:")
+        print(f"{'delay_ms':>8} {'rebalances':>10} {'largest_move':>12} {'total_moved':>11} {'lowest_cash':>11} {'venue_limited':>13}")
+        for delay in sorted(delays):
+            venues = results[delay][1]
+            moves = [amount for _, amount in venues.transfers]
+            lowest = venues.lowest_balance if venues.lowest_balance != float("inf") else arguments.bankroll_dollars / 2.0
+            print(f"{delay:>8} {len(moves):>10} {max(moves, default=0.0):>12.2f} {sum(moves):>11.2f} {lowest:>11.2f} "
+                  f"{venues.limited_trades:>13}")
 
     summary, rows = summarize(runs[arguments.detail_delay_ms], settlements, now_ns, arguments.suspect_edge)
     print(f"\nlargest trades at {arguments.detail_delay_ms} ms:")
