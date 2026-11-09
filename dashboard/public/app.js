@@ -434,11 +434,17 @@ function renderHealth(data) {
   const ladders = streamingPairs ? streamingPairs * LADDERS_PER_PAIR : null;
   const synchronized = engine ? engine.synchronizedLadders : null;
   const uptimeKind = feeds.streamingRecentFraction >= 0.95 ? "good" : feeds.streamingRecentFraction >= 0.8 ? "warning" : "critical";
-  const feedTile = (venue) => tile({
-    label: `${venue} feed`, value: feeds.current[venue] ? "Connected" : "Down", statusKind: feeds.current[venue] ? "good" : "critical",
-    detail: bot.running ? "" : "Bot stopped",
-  });
   const isFirstDiscovery = bot.running && !streamingPairs;
+  const feedTile = (venue) => {
+    if (feeds.current[venue]) {
+      return tile({ label: `${venue} feed`, value: "Connected", statusKind: "good" });
+    }
+    if (isFirstDiscovery) {
+      return tile({ label: `${venue} feed`, value: "Starting up", statusKind: "warning",
+        detail: "Connects after the startup catalog download, about 10 minutes" });
+    }
+    return tile({ label: `${venue} feed`, value: "Down", statusKind: "critical", detail: bot.running ? "Reconnecting" : "Bot stopped" });
+  };
   document.getElementById("health-tiles").replaceChildren(
     feedTile("Kalshi"),
     feedTile("Polymarket"),
