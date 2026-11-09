@@ -46,6 +46,8 @@ MAJOR_LEAGUES = {
     },
 }
 
+INDIVIDUAL_LEAGUES = {"atp", "wta", "itf", "ufc", "zuffa", "wtt", "modus", "pdc"}
+
 EXCLUDED_SERIES = {"KXNBAGAME", "KXNHLGAME", "KXNFLGAME", "KXMLBGAME", "KXT20MATCH", "KXWT20MATCH", "KXTESTMATCH",
                    "KXODIMATCH", "KXWODIMATCH"}
 
@@ -202,12 +204,12 @@ def series_leagues(kalshi_events, polymarket):
                 second_score = max(word_overlap(names[1], name) for name in poly_names[second])
                 if min(first_score, second_score) >= 0.99:
                     votes[event["series"]][poly_event["league"]] += 1
-    best_series_for_league = {}
+    league_of_series = {}
     for series, counter in votes.items():
         league, count = counter.most_common(1)[0]
-        if count >= 2 and count > best_series_for_league.get(league, ("", 0))[1]:
-            best_series_for_league[league] = (series, count)
-    return {series: league for league, (series, _) in best_series_for_league.items()}
+        if count >= 2:
+            league_of_series[series] = league
+    return league_of_series
 
 
 def ordered_codes(ticker, event):
@@ -239,8 +241,9 @@ def link_codes(kalshi_events, polymarket, league_of_series):
                     best = (total, scores, assignment)
         if best and (min(best[1]) >= 0.5 or max(best[1]) >= 0.85):
             for code, team in zip(codes, best[2]):
-                links[(event["series"], code)][team["id"]] += 1
-                kalshi_names[(event["series"], code)] = event["teams"][code]
+                key = (event["series"], "name:" + event["teams"][code] if league in INDIVIDUAL_LEAGUES else code)
+                links[key][team["id"]] += 1
+                kalshi_names[key] = event["teams"][code]
     return links, kalshi_names
 
 
@@ -325,7 +328,8 @@ def major_league_entities(kalshi_markets, polymarket_teams):
                 name = f"{city_of(kalshi_name)} {team['name']}"
             entities.append(entity_record(code, name, kalshi_name, team, True))
         leagues.append({"name": league_name, "kalshiSeriesPrefix": spec["kalshiSeriesPrefix"],
-                        "polymarketSlugPrefix": league_name + "-", "entities": entities})
+                        "kalshiSeriesPrefixes": [spec["kalshiSeriesPrefix"]], "polymarketSlugPrefix": league_name + "-",
+                        "individual": False, "entities": entities})
     return leagues
 
 
@@ -340,14 +344,20 @@ def linked_league_entities(kalshi_markets, polymarket_teams, polymarket_events):
         if team is None:
             continue
         league_name = league_of_series[series]
-        league = leagues.setdefault(league_name, {"name": league_name, "kalshiSeriesPrefix": re.sub(r"(GAME|MATCH)$", "", series),
-                                                  "polymarketSlugPrefix": league_name + "-", "entities": []})
-        league["entities"].append(entity_record(code, team["name"], kalshi_names[(series, code)], team, False))
-    prefixes = [league["kalshiSeriesPrefix"] for league in leagues.values()]
+        prefix = re.sub(r"(GAME|MATCH)$", "", series)
+        league = leagues.setdefault(league_name, {"name": league_name, "kalshiSeriesPrefix": prefix, "kalshiSeriesPrefixes": [],
+                                                  "polymarketSlugPrefix": league_name + "-", "individual": league_name in INDIVIDUAL_LEAGUES,
+                                                  "entities": []})
+        if prefix not in league["kalshiSeriesPrefixes"]:
+            league["kalshiSeriesPrefixes"].append(prefix)
+        entity_code = f"P{team['id']}" if league["individual"] else code
+        league["entities"].append(entity_record(entity_code, team["name"], kalshi_names[(series, code)], team, False))
+    prefixes = [prefix for league in leagues.values() for prefix in league["kalshiSeriesPrefixes"]]
     for series in sorted({event["series"] for _, event in kalshi_events}):
         prefix = re.sub(r"(GAME|MATCH)$", "", series)
         if prefix not in prefixes and any(prefix.startswith(other) for other in prefixes):
-            leagues[prefix.lower()] = {"name": prefix.lower(), "kalshiSeriesPrefix": prefix, "polymarketSlugPrefix": "", "entities": []}
+            leagues[prefix.lower()] = {"name": prefix.lower(), "kalshiSeriesPrefix": prefix, "kalshiSeriesPrefixes": [prefix],
+                                       "polymarketSlugPrefix": "", "entities": []}
     return list(leagues.values())
 
 
@@ -355,6 +365,12 @@ def merge(existing, fresh):
     by_name = {league["name"]: league for league in existing}
     for league in fresh:
         current = by_name.setdefault(league["name"], {**league, "entities": []})
+        prefixes = current.get("kalshiSeriesPrefixes") or [current["kalshiSeriesPrefix"]]
+        for prefix in league.get("kalshiSeriesPrefixes") or [league["kalshiSeriesPrefix"]]:
+            if prefix not in prefixes:
+                prefixes.append(prefix)
+        current["kalshiSeriesPrefixes"] = prefixes
+        current["individual"] = current.get("individual", False) or league.get("individual", False)
         entities = {entity["code"]: entity for entity in current["entities"]}
         for entity in league["entities"]:
             if entity["verified"] or not entities.get(entity["code"], {}).get("verified"):
@@ -366,7 +382,7 @@ def merge(existing, fresh):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="config/entities.json")
-    parser.add_argument("--days", type=int, default=10)
+    parser.add_argument("--days", type=int, default=21)
     arguments = parser.parse_args()
     try:
         with open(arguments.output) as file:

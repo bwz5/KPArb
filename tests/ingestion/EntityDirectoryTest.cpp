@@ -29,7 +29,10 @@ const char* const entitiesJson = R"json({"leagues":[
         {"code":"KU","name":"Kansas Jayhawks","aliases":["Kansas"]},
         {"code":"KSU","name":"Kansas State Wildcats","aliases":["Kansas St.","Kansas State"]},
         {"code":"MIA","name":"Miami Hurricanes","aliases":["Miami (FL)","Miami"]},
-        {"code":"MOH","name":"Miami (OH) RedHawks","aliases":["Miami (OH)","Miami"]}]}
+        {"code":"MOH","name":"Miami (OH) RedHawks","aliases":["Miami (OH)","Miami"]}]},
+    {"name":"atp","kalshiSeriesPrefixes":["KXATP","KXATPCHALLENGER"],"polymarketSlugPrefix":"atp-","individual":true,"entities":[
+        {"code":"P101","name":"Clement Tabur","aliases":["C. Tabur"]},
+        {"code":"P102","name":"Lukas Neumayer","aliases":["L. Neumayer"]}]}
 ]})json";
 
 MarketInfo kalshiMarket(std::string eventTicker, std::string ticker, std::string title)
@@ -75,6 +78,27 @@ TEST(EntityDirectoryTest, BothVenuesEndUpWithTheSameEntityNames)
     EXPECT_EQ(polymarket.yesOutcomeEntityKey, "nhl:CGY");
     EXPECT_EQ(polymarket.noOutcomeEntityKey, "nhl:SEA");
     EXPECT_EQ(kalshi.yesOutcomeEntityKey, "nhl:CGY");
+}
+
+TEST(EntityDirectoryTest, IndividualSportsAreKeyedByNameAcrossSeveralKalshiSeries)
+{
+    const EntityDirectory entities = EntityDirectory::parse(entitiesJson);
+    MarketInfo kalshi = kalshiMarket("KXATPCHALLENGERMATCH-26NOV09TABNEU", "KXATPCHALLENGERMATCH-26NOV09TABNEU-TAB", "Will Clement Tabur win?");
+    kalshi.subtitle = "Clement Tabur";
+    kalshi.rulesSummary = "If Clement Tabur wins the Clement Tabur vs Lukas Neumayer professional tennis match, then the market resolves to Yes.";
+    MarketInfo polymarket = polymarketMarket("atp-tabur-neumaye-2026-11-09", "Orleans: Clement Tabur vs Lukas Neumayer");
+    polymarket.yesOutcomeName = "C. Tabur";
+    polymarket.noOutcomeName = "L. Neumayer";
+    entities.annotate(kalshi);
+    entities.annotate(polymarket);
+    EXPECT_EQ(kalshi.entityLeague, "atp");
+    EXPECT_EQ(kalshi.subjectTeamKey, "atp:P101");
+    EXPECT_EQ(kalshi.teamKeys, (std::vector<std::string>{"atp:P101", "atp:P102"}));
+    EXPECT_EQ(polymarket.teamKeys, kalshi.teamKeys);
+    EXPECT_EQ(polymarket.yesOutcomeEntityKey, "atp:P101");
+    MarketInfo mainTour = kalshiMarket("KXATPMATCH-26NOV09TABNEU", "KXATPMATCH-26NOV09TABNEU-TAB", "Will Clement Tabur win?");
+    entities.annotate(mainTour);
+    EXPECT_EQ(mainTour.entityLeague, "atp");
 }
 
 TEST(EntityDirectoryTest, LongestAliasWinsAndCanonicalNamesAreNotRewrittenTwice)

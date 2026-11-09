@@ -117,8 +117,16 @@ EntityDirectory EntityDirectory::parse(const std::string& json)
     for (const auto& leagueObject : leagueList) {
         EntityLeague league;
         league.name = leagueObject.value("name", "");
-        league.kalshiSeriesPrefix = leagueObject.value("kalshiSeriesPrefix", "");
+        for (const auto& prefix : leagueObject.value("kalshiSeriesPrefixes", nlohmann::json::array())) {
+            league.kalshiSeriesPrefixes.push_back(prefix.get<std::string>());
+        }
+        const std::string singlePrefix = leagueObject.value("kalshiSeriesPrefix", "");
+        if (!singlePrefix.empty()
+            && std::find(league.kalshiSeriesPrefixes.begin(), league.kalshiSeriesPrefixes.end(), singlePrefix) == league.kalshiSeriesPrefixes.end()) {
+            league.kalshiSeriesPrefixes.push_back(singlePrefix);
+        }
         league.polymarketSlugPrefix = leagueObject.value("polymarketSlugPrefix", "");
+        league.isIndividual = leagueObject.value("individual", false);
         std::map<std::string, AliasTarget> entityOfAlias;
         const nlohmann::json entityList = leagueObject.value("entities", nlohmann::json::array());
         for (const auto& entityObject : entityList) {
@@ -187,10 +195,16 @@ const EntityLeague* EntityDirectory::leagueOf(const MarketInfo& market) const no
     const EntityLeague* best = nullptr;
     std::size_t bestLength = 0;
     for (const EntityLeague& league : leagues) {
-        const std::string& prefix = market.venue == Venue::Kalshi ? league.kalshiSeriesPrefix : league.polymarketSlugPrefix;
-        if (prefix.size() > bestLength && startsWith(market.eventIdentifier, prefix)) {
+        if (market.venue == Venue::Kalshi) {
+            for (const std::string& prefix : league.kalshiSeriesPrefixes) {
+                if (prefix.size() > bestLength && startsWith(market.eventIdentifier, prefix)) {
+                    best = &league;
+                    bestLength = prefix.size();
+                }
+            }
+        } else if (league.polymarketSlugPrefix.size() > bestLength && startsWith(market.eventIdentifier, league.polymarketSlugPrefix)) {
             best = &league;
-            bestLength = prefix.size();
+            bestLength = league.polymarketSlugPrefix.size();
         }
     }
     return best;
@@ -322,7 +336,7 @@ void EntityDirectory::annotate(MarketInfo& market) const
         *field = std::move(canonical.text);
     }
     market.rules = canonicalize(*league, market.rules).text;
-    if (market.venue == Venue::Kalshi) {
+    if (market.venue == Venue::Kalshi && !league->isIndividual) {
         const std::vector<std::size_t> eventEntities = kalshiEventEntities(*league, market.eventIdentifier);
         mentioned.insert(mentioned.end(), eventEntities.begin(), eventEntities.end());
         market.subjectTeamKey = kalshiSubjectKey(*league, market.identifier);

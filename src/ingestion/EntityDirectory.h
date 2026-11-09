@@ -24,8 +24,9 @@ struct EntityAlias {
 
 struct EntityLeague {
     std::string name;
-    std::string kalshiSeriesPrefix;
+    std::vector<std::string> kalshiSeriesPrefixes;
     std::string polymarketSlugPrefix;
+    bool isIndividual = false;
     std::vector<Entity> entities;
     std::unordered_map<std::string, std::size_t> entityIndexByCode;
     std::unordered_map<std::string, std::vector<EntityAlias>> aliasesByFirstWord;

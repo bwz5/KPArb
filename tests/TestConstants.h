@@ -385,7 +385,7 @@ inline constexpr std::size_t nextDayPolymarketMarket = 1;
 }
 
 namespace entity_directory_test {
-inline constexpr std::size_t fixtureEntityCount = 16;
+inline constexpr std::size_t fixtureEntityCount = 18;
 inline constexpr std::size_t minimumConfiguredLeagueCount = 4;
 inline constexpr std::size_t minimumConfiguredEntityCount = 126;
 }
