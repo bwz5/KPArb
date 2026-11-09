@@ -553,7 +553,6 @@ window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => latest && (renderHealth(latest), renderPnl(latest), renderExecution(latest)), 150);
 });
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => latest && (renderHealth(latest), renderPnl(latest), renderExecution(latest)));
 
 refresh();
 setInterval(refresh, REFRESH_MS);
