@@ -213,7 +213,8 @@ async function weeklyReport() {
 async function runSchedules(state, data, now) {
   const date = new Date(now);
   const today = localDayKey(now);
-  if (date.getHours() >= DAILY_SUMMARY_HOUR && state.lastDailySummary !== today) {
+  const canPost = Boolean(webhookUrl());
+  if (canPost && date.getHours() >= DAILY_SUMMARY_HOUR && state.lastDailySummary !== today) {
     state.lastDailySummary = today;
     await dailySummary(data);
   }
@@ -222,7 +223,7 @@ async function runSchedules(state, data, now) {
     saveState(state);
     await rebuildEntities();
   }
-  if (date.getDay() === WEEKLY_REPORT_DAY && date.getHours() >= DAILY_SUMMARY_HOUR && state.lastWeeklyReport !== today) {
+  if (canPost && date.getDay() === WEEKLY_REPORT_DAY && date.getHours() >= DAILY_SUMMARY_HOUR && state.lastWeeklyReport !== today) {
     state.lastWeeklyReport = today;
     saveState(state);
     await weeklyReport();
