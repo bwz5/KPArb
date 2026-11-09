@@ -307,6 +307,7 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
     std::unique_ptr<BackgroundMatcher> nextMatcher;
     Clock::time_point nextMatcherDeadline;
     std::size_t cycle = matcher ? 1 : 0;
+    std::size_t streamedPairCountNow = 0;
 
     const auto advanceRefresh = [&]() -> bool {
         if (!refresh && !nextMatcher && Clock::now() >= nextRefreshAt) {
@@ -334,7 +335,8 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
             nextMatcherDeadline = Clock::now() + matchingWait;
             return false;
         }
-        if (nextMatcher && isReadyToStream(*nextMatcher, nextMatcherDeadline)) {
+        const bool hasCaughtUp = nextMatcher && nextMatcher->acceptedPairCount() >= streamedPairCountNow;
+        if (nextMatcher && (hasCaughtUp || nextMatcher->isFinished() || Clock::now() >= nextMatcherDeadline)) {
             matcher = std::move(nextMatcher);
             nextRefreshAt = Clock::now() + refreshInterval;
             std::cout << "swapping in " << matcher->acceptedPairCount() << " pairs from discovery cycle " << cycle << '\n';
@@ -358,6 +360,7 @@ int Application::runDiscoveryCycles(LogChannels& channels, Clock::time_point ove
         }
 
         const std::size_t streamedPairCount = pairs.size();
+        streamedPairCountNow = streamedPairCount;
         const bool canGrow = streamedPairCount < config.maximumPairs;
         const auto sessionStartedAt = Clock::now();
         const auto shouldEndSession = [&] {
