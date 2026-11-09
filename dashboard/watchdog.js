@@ -18,6 +18,26 @@ const DAILY_SUMMARY_HOUR = 9;
 const ENTITY_REBUILD_HOUR = 4;
 const WEEKLY_REPORT_DAY = 1;
 const SCRIPT_TIMEOUT_MS = 30 * 60_000;
+const HEARTBEAT_FILE = path.join(ROOT, "data/watchdog_heartbeat");
+const FAILURE_REPEAT_MS = 15 * 60_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const MAXIMUM_FAILURE_GROUPS = 15;
+const ENGINE_STALL_MS = 3 * 60_000;
+const MINIMUM_FREE_DISK_BYTES = 5 * 1024 ** 3;
+const FAILURE_PATTERN = new RegExp([
+  "^fatal",
+  "^discovery failed",
+  "^could not",
+  "^kalshi order api (did not|check failed)",
+  "Kalshi rejected",
+  "feed_event \\S+ (connection_error|authentication_failed|sequence_gap|queue_overflow|parse_error|server_error|resync_requested)",
+  "language model was disabled",
+  "HALTED",
+  "too many distinct",
+  "Unable to",
+  "terminate called|Segmentation fault|Abort trap|libc\\+\\+abi",
+].join("|"), "i");
+const IGNORED_PATTERN = /catalog fetch cancelled by shutdown/;
 
 function readEnvironmentFile() {
   const values = {};
@@ -81,6 +101,94 @@ function runScript(args) {
 function money(value) {
   const sign = value < 0 ? "-" : "+";
   return `${sign}$${Math.abs(value).toFixed(2)}`;
+}
+
+function normalizeFailure(line) {
+  return line.replace(/[0-9]+/g, "N").replace(/after_cursor=[^&\s]+/g, "after_cursor=…").slice(0, 160);
+}
+
+async function reportFailures(state, lines, now) {
+  const groups = new Map();
+  for (const line of lines) {
+    const key = normalizeFailure(line);
+    const group = groups.get(key) || { example: line, count: 0 };
+    group.count += 1;
+    groups.set(key, group);
+  }
+  const lastPosted = state.failureLastPosted || (state.failureLastPosted = {});
+  const suppressed = state.failureSuppressed || (state.failureSuppressed = {});
+  const due = [];
+  for (const [key, group] of groups) {
+    if (lastPosted[key] && now - lastPosted[key] < FAILURE_REPEAT_MS) {
+      suppressed[key] = (suppressed[key] || 0) + group.count;
+      continue;
+    }
+    const total = group.count + (suppressed[key] || 0);
+    delete suppressed[key];
+    lastPosted[key] = now;
+    due.push(`• ${total > 1 ? `${total}× ` : ""}\`${group.example.slice(0, 300)}\``);
+  }
+  for (const key of Object.keys(lastPosted)) {
+    if (now - lastPosted[key] > 24 * HOUR_MS) {
+      delete lastPosted[key];
+      delete suppressed[key];
+    }
+  }
+  if (due.length) {
+    const extra = due.length > MAXIMUM_FAILURE_GROUPS ? `\n…and ${due.length - MAXIMUM_FAILURE_GROUPS} more kinds` : "";
+    await post(`:x: *KPArb failure${due.length > 1 ? "s" : ""}*\n${due.slice(0, MAXIMUM_FAILURE_GROUPS).join("\n")}${extra}`);
+  }
+}
+
+function newConsoleLines(state) {
+  if (!fs.existsSync(CONSOLE_LOG)) {
+    return [];
+  }
+  const size = fs.statSync(CONSOLE_LOG).size;
+  if (state.consoleOffset === undefined || state.consoleOffset > size) {
+    state.consoleOffset = size;
+    return [];
+  }
+  const length = Math.min(size - state.consoleOffset, 8 * 1024 * 1024);
+  if (length <= 0) {
+    return [];
+  }
+  const buffer = Buffer.alloc(length);
+  const handle = fs.openSync(CONSOLE_LOG, "r");
+  fs.readSync(handle, buffer, 0, length, state.consoleOffset);
+  fs.closeSync(handle);
+  const text = buffer.toString("utf8");
+  const complete = text.lastIndexOf("\n") + 1;
+  state.consoleOffset += Buffer.byteLength(text.slice(0, complete));
+  return text.slice(0, complete).split("\n").filter((line) => line && !line.startsWith("  [") && FAILURE_PATTERN.test(line) && !IGNORED_PATTERN.test(line));
+}
+
+function otherFailures(state, data, now) {
+  const failures = [];
+  for (const trade of data.paper.trades || []) {
+    if (trade.timeMs > (state.lastTradeErrorMs || 0) && (trade.first_error || trade.second_error)) {
+      failures.push(`order error on ${trade.kalshi_ticker}: ${trade.first_error || trade.second_error}`);
+    }
+  }
+  if ((data.paper.trades || []).length) {
+    state.lastTradeErrorMs = Math.max(state.lastTradeErrorMs || 0, ...data.paper.trades.map((trade) => trade.timeMs));
+  }
+  if (data.paper.error) {
+    failures.push(`paper P&L settlement failed: ${data.paper.error}`);
+  }
+  if (data.bot.running && data.engine && now - data.engine.time > ENGINE_STALL_MS && data.console.streamingPairs) {
+    failures.push(`engine stats have not updated for ${Math.round((now - data.engine.time) / 60_000)} minutes while the bot is running`);
+  }
+  try {
+    const disk = fs.statfsSync(ROOT);
+    const free = disk.bavail * disk.bsize;
+    if (free < MINIMUM_FREE_DISK_BYTES) {
+      failures.push(`low disk space: ${(free / 1024 ** 3).toFixed(1)} GB free`);
+    }
+  } catch (error) {
+    failures.push(`could not check disk space: ${error.message}`);
+  }
+  return failures;
 }
 
 function restartBot(state, now) {
@@ -238,13 +346,16 @@ async function tick() {
   }
   checking = true;
   const state = loadState();
+  const now = Date.now();
   try {
-    const now = Date.now();
+    const consoleFailures = newConsoleLines(state);
     const data = await summary();
     await checkHealth(state, data, now);
+    await reportFailures(state, consoleFailures.concat(otherFailures(state, data, now)), now);
     await runSchedules(state, data, now);
   } catch (error) {
     log(`check failed: ${error.message}`);
+    await reportFailures(state, [`watchdog check failed: ${error.message}`], now);
   } finally {
     saveState(state);
     checking = false;
@@ -258,6 +369,17 @@ if (require.main === module) {
     post(":wave: KPArb watchdog test message. Alerts will arrive in this channel.").then(() => process.exit(0));
   } else {
     log(`watchdog started; Slack ${webhookUrl() ? "configured" : "not configured (set KPARB_SLACK_WEBHOOK_URL in .env)"}`);
+    process.on("uncaughtException", (error) => {
+      post(`:x: *KPArb watchdog crashed*: ${error.message}. The guard restarts it within 5 minutes.`).finally(() => process.exit(1));
+    });
+    process.on("unhandledRejection", (error) => {
+      post(`:x: *KPArb watchdog error*: ${error && error.message ? error.message : error}`);
+    });
+    const beat = () => fs.writeFileSync(HEARTBEAT_FILE, String(Date.now()));
+    beat();
+    if (!once) {
+      setInterval(beat, HEARTBEAT_INTERVAL_MS);
+    }
     tick().then(() => {
       if (!once) {
         setInterval(tick, CHECK_INTERVAL_MS);
