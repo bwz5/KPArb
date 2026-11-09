@@ -118,6 +118,7 @@ std::vector<PairNameRecord> makePairNameRecords(std::uint32_t pairIndex, PairNam
 
 void PairNameDirectory::absorb(const PairNameRecord& record)
 {
+    inversions[record.pairIndex] = record.isInverted != 0;
     auto& parts = chunks[{record.pairIndex, record.field}];
     if (record.chunkIndex == 0 || parts.size() != record.chunkCount) {
         parts.assign(record.chunkCount, std::string());
@@ -149,6 +150,12 @@ std::string PairNameDirectory::kalshiTicker(std::uint32_t pairIndex) const
 std::string PairNameDirectory::polymarketIdentifier(std::uint32_t pairIndex) const
 {
     return assemble(pairIndex, PairNameField::PolymarketIdentifier);
+}
+
+bool PairNameDirectory::isInverted(std::uint32_t pairIndex) const
+{
+    const auto found = inversions.find(pairIndex);
+    return found != inversions.end() && found->second;
 }
 
 std::string formatRecordText(const LogRecord& record, const PairNameDirectory& names)
@@ -215,7 +222,7 @@ std::string csvHeaderFor(RecordType type)
 {
     switch (type) {
     case RecordType::Opportunity:
-        return "timestamp_ns,kalshi_ticker,polymarket_identifier,direction,kalshi_price,polymarket_price,edge,contracts,expected_profit,kalshi_worst_price,polymarket_worst_price,levels,latency_ns";
+        return "timestamp_ns,kalshi_ticker,polymarket_identifier,direction,kalshi_price,polymarket_price,edge,contracts,expected_profit,kalshi_worst_price,polymarket_worst_price,levels,latency_ns,is_inverted";
     case RecordType::OpportunityClosed:
         return "timestamp_ns,kalshi_ticker,polymarket_identifier,direction,open_duration_ns";
     case RecordType::FeedEvent:
@@ -246,7 +253,8 @@ std::string formatRecordCsv(const LogRecord& record, const PairNameDirectory& na
                << std::setprecision(3) << ticksToDollars(payload.kalshiWorstPrice) << ','
                << ticksToDollars(payload.polymarketWorstPrice) << ','
                << static_cast<int>(payload.levelsConsumed) << ','
-               << (record.header.timestampNanos - payload.triggerReceivedAtNanos);
+               << (record.header.timestampNanos - payload.triggerReceivedAtNanos) << ','
+               << (names.isInverted(payload.pairIndex) ? 1 : 0);
         break;
     }
     case RecordType::OpportunityClosed: {

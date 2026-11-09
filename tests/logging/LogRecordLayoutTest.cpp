@@ -50,6 +50,8 @@ TEST(LogRecordLayoutTest, PairNamesSurviveChunking)
     EXPECT_EQ(directory.polymarketIdentifier(namedPairIndex), longIdentifier + "end");
     EXPECT_EQ(directory.kalshiTicker(namedPairIndex), "KXFED-26DEC-T4.00");
     EXPECT_EQ(directory.kalshiTicker(unnamedPairIndex), "pair#" + std::to_string(unnamedPairIndex));
+    EXPECT_TRUE(directory.isInverted(namedPairIndex));
+    EXPECT_FALSE(directory.isInverted(unnamedPairIndex));
 }
 
 }

@@ -24,11 +24,13 @@ public:
     void absorb(const PairNameRecord& record);
     std::string kalshiTicker(std::uint32_t pairIndex) const;
     std::string polymarketIdentifier(std::uint32_t pairIndex) const;
+    bool isInverted(std::uint32_t pairIndex) const;
 
 private:
     std::string assemble(std::uint32_t pairIndex, PairNameField field) const;
 
     std::map<std::pair<std::uint32_t, PairNameField>, std::vector<std::string>> chunks;
+    std::map<std::uint32_t, bool> inversions;
 };
 
 std::string formatRecordText(const LogRecord& record, const PairNameDirectory& names);
