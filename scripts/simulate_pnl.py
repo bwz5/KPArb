@@ -371,6 +371,7 @@ def main():
     parser.add_argument("--suspect-edge", type=float, default=0.20)
     parser.add_argument("--detail-delay-ms", type=int, default=250)
     parser.add_argument("--output", default="data/sim")
+    parser.add_argument("--summary-json", help="also write each delay's totals to this JSON file")
     arguments = parser.parse_args()
 
     since_ns = int(datetime.datetime.fromisoformat(arguments.since).timestamp() * NANOS_PER_SECOND) if arguments.since else 0
@@ -402,10 +403,12 @@ def main():
     print(f"{'delay_ms':>8} {'trades':>6} {'contracts':>10} {'expected':>10} {'realized':>10} {'pending':>8} "
           f"{'mismatch':>8} {'suspect':>8} {'clean_pnl':>10} {'peak_cap':>10} {'return':>7}")
     os.makedirs(arguments.output, exist_ok=True)
+    summaries = {}
     for delay in sorted(delays):
         summary, rows = summarize(runs[delay], settlements, now_ns, arguments.suspect_edge)
         clean = summary["realized"] + summary["pending_expected"] - summary["suspect_profit"]
         capital = summary["peak_capital"]
+        summaries[delay] = {**summary, "clean_pnl": clean}
         print(f"{delay:>8} {int(summary['trades']):>6} {summary['contracts']:>10.0f} {summary['expected']:>10.2f} "
               f"{summary['realized']:>10.2f} {int(summary['pending']):>8} {int(summary['mismatched']):>8} "
               f"{int(summary['suspect']):>8} {clean:>10.2f} {capital:>10.0f} {clean / capital if capital else 0:>7.2%}")
@@ -418,6 +421,10 @@ def main():
                                  trade.episode.direction, trade.contracts, f"{trade.edge:.3f}", f"{trade.cost:.2f}",
                                  f"{trade.expected_profit:.2f}", "" if payout is None else f"{payout:.3f}",
                                  "" if realized is None else f"{realized:.2f}", int(suspect), trade.episode.log_file])
+
+    if arguments.summary_json:
+        with open(arguments.summary_json, "w") as handle:
+            json.dump({"episodes": len(episodes), "delays": summaries}, handle, indent=1)
 
     if any(result[1] for result in results.values()):
         print(f"\nvenue cash, split evenly and rebalanced every {arguments.rebalance_hours:g} h:")

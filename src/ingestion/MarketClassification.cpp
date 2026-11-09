@@ -86,6 +86,35 @@ std::string polymarketMarketType(std::string_view sportsMarketType)
     return std::string(type);
 }
 
+std::vector<std::string> polymarketSportsTypesFor(std::string_view kalshiType)
+{
+    static constexpr std::array<std::string_view, 6> periodPrefixes{"first_half_", "second_half_", "q1_", "q2_", "q3_", "q4_"};
+    std::string_view period;
+    std::string_view base = kalshiType;
+    for (const std::string_view prefix : periodPrefixes) {
+        if (startsWith(base, prefix)) {
+            period = prefix;
+            base.remove_prefix(prefix.size());
+            break;
+        }
+    }
+    static constexpr std::array<std::pair<std::string_view, std::string_view>, 6> plurals{{
+        {"winner", "moneyline"},
+        {"spread", "spreads"},
+        {"team_total", "team_totals"},
+        {"total", "totals"},
+        {"exact_score", "exact_score"},
+        {"both_teams_to_score", "both_teams_to_score"},
+    }};
+    for (const auto& [singular, plural] : plurals) {
+        if (base == singular) {
+            const std::string name = std::string(period) + std::string(plural);
+            return {name, "soccer_" + name};
+        }
+    }
+    return {};
+}
+
 bool areMarketTypesCompatible(std::string_view kalshiType, std::string_view polymarketType) noexcept
 {
     return kalshiType.empty() || kalshiType == polymarketType;

@@ -303,11 +303,12 @@ void MarketMatcher::processPendingCandidates(MatchRun& run, const std::vector<st
     }
 }
 
-double MarketMatcher::noResultProbabilityFor(const std::string& kalshiTicker) const noexcept
+double MarketMatcher::noResultProbabilityFor(const std::string& kalshiTicker, bool polymarketPaysEven) const noexcept
 {
-    double probability = settings.defaultNoResultProbability;
+    double probability = polymarketPaysEven ? settings.defaultUnevenNoResultProbability : settings.defaultNoResultProbability;
     std::size_t longestPrefix = 0;
-    for (const auto& [prefix, prefixProbability] : settings.noResultProbabilityByKalshiPrefix) {
+    const auto& overrides = polymarketPaysEven ? settings.unevenNoResultProbabilityByKalshiPrefix : settings.noResultProbabilityByKalshiPrefix;
+    for (const auto& [prefix, prefixProbability] : overrides) {
         if (prefix.size() > longestPrefix && kalshiTicker.starts_with(prefix)) {
             probability = prefixProbability;
             longestPrefix = prefix.size();
@@ -319,7 +320,9 @@ double MarketMatcher::noResultProbabilityFor(const std::string& kalshiTicker) co
 void MarketMatcher::priceNoResultRisk(MatchedPair& pair, const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) const
 {
     const SettlementComparison comparison = compareSettlementTerms(kalshiMarket, polymarketMarket);
-    pair.noResultProbability = comparison.carriesNoResultRisk ? noResultProbabilityFor(kalshiMarket.identifier) : 0.0;
+    pair.noResultProbability = comparison.carriesNoResultRisk
+        ? noResultProbabilityFor(kalshiMarket.identifier, comparison.polymarketPaysEvenOnNoResult)
+        : 0.0;
     pair.polymarketYesNoResultValue = comparison.polymarketYesNoResultValue;
     pair.polymarketNoNoResultValue = comparison.polymarketNoNoResultValue;
 }

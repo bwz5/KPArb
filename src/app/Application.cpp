@@ -15,6 +15,7 @@
 #include "ingestion/KalshiMarketCatalog.h"
 #include "ingestion/KalshiSigner.h"
 #include "ingestion/LadderDirectory.h"
+#include "ingestion/MarketClassification.h"
 #include "ingestion/MarketFilter.h"
 #include "ingestion/PolymarketBookFeed.h"
 #include "ingestion/PolymarketMarketCatalog.h"
@@ -36,6 +37,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <thread>
 #include <unordered_set>
@@ -482,8 +484,37 @@ DiscoveredMarkets Application::discoverMarkets(LogChannel& applicationChannel, c
             std::cout << "  polymarket pages=" << pages << " markets=" << markets << '\n';
         }
     };
-    std::cout << "fetching Polymarket markets...\n";
-    auto polymarketFetched = PolymarketMarketCatalog(polymarketSettings, httpClient).fetchOpenMarkets(printPolymarketProgress);
+    std::vector<MarketInfo> polymarketFetched;
+    const bool isFullSweep = config.fullPolymarketCatalogEveryCycles <= 1 || discoveriesSinceFullSweep == 0
+        || discoveriesSinceFullSweep >= config.fullPolymarketCatalogEveryCycles;
+    if (isFullSweep) {
+        std::cout << "fetching all Polymarket markets...\n";
+        polymarketFetched = PolymarketMarketCatalog(polymarketSettings, httpClient).fetchOpenMarkets(printPolymarketProgress);
+        cachedOtherPolymarketMarkets.clear();
+        for (const MarketInfo& market : polymarketFetched) {
+            if (market.marketType.empty()) {
+                cachedOtherPolymarketMarkets.push_back(market);
+            }
+        }
+        discoveriesSinceFullSweep = 1;
+    } else {
+        std::set<std::string> sportsTypes;
+        for (const MarketInfo& market : markets.kalshi) {
+            for (std::string& type : polymarketSportsTypesFor(market.marketType)) {
+                sportsTypes.insert(std::move(type));
+            }
+        }
+        std::cout << "fetching Polymarket markets of " << sportsTypes.size() << " sports types that Kalshi lists, plus "
+                  << cachedOtherPolymarketMarkets.size() << " other markets from the last full sweep...\n";
+        for (const std::string& type : sportsTypes) {
+            PolymarketCatalogSettings typeSettings = polymarketSettings;
+            typeSettings.sportsMarketType = type;
+            auto typed = PolymarketMarketCatalog(typeSettings, httpClient).fetchOpenMarkets(printPolymarketProgress);
+            polymarketFetched.insert(polymarketFetched.end(), std::make_move_iterator(typed.begin()), std::make_move_iterator(typed.end()));
+        }
+        polymarketFetched.insert(polymarketFetched.end(), cachedOtherPolymarketMarkets.begin(), cachedOtherPolymarketMarkets.end());
+        ++discoveriesSinceFullSweep;
+    }
 
     PolymarketCatalogSettings moneylineSettings = polymarketSettings;
     moneylineSettings.maximumEndTimestamp = std::max(window.latestSeconds, nowSeconds + config.polymarketMoneylineSearchDays * 86400);

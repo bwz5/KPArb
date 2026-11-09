@@ -179,6 +179,7 @@ SettlementComparison compareSettlementTerms(const MarketInfo& kalshiMarket, cons
     case NoResultSettlement::FiftyFifty:
         comparison.polymarketYesNoResultValue = 0.5;
         comparison.polymarketNoNoResultValue = 0.5;
+        comparison.polymarketPaysEvenOnNoResult = true;
         break;
     case NoResultSettlement::ResolvesNo:
         comparison.polymarketNoNoResultValue = 1.0;

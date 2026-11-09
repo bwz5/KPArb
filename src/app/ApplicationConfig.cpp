@@ -101,13 +101,18 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readInto(matching, "sharedTeamBonus", config.matcher.candidates.sharedTeamBonus);
     readInto(matching, "excludedKalshiTickerPrefixes", config.matcher.excludedKalshiTickerPrefixes);
     readInto(matching, "defaultNoResultProbability", config.matcher.defaultNoResultProbability);
-    const auto noResultOverrides = matching.find("noResultProbabilityByKalshiPrefix");
-    if (noResultOverrides != matching.end() && noResultOverrides->is_object()) {
-        config.matcher.noResultProbabilityByKalshiPrefix.clear();
-        for (const auto& [prefix, probability] : noResultOverrides->items()) {
-            config.matcher.noResultProbabilityByKalshiPrefix.emplace_back(prefix, probability.get<double>());
+    readInto(matching, "defaultUnevenNoResultProbability", config.matcher.defaultUnevenNoResultProbability);
+    const auto readOverrides = [&matching](const char* key, std::vector<std::pair<std::string, double>>& destination) {
+        const auto found = matching.find(key);
+        if (found != matching.end() && found->is_object()) {
+            destination.clear();
+            for (const auto& [prefix, probability] : found->items()) {
+                destination.emplace_back(prefix, probability.get<double>());
+            }
         }
-    }
+    };
+    readOverrides("noResultProbabilityByKalshiPrefix", config.matcher.noResultProbabilityByKalshiPrefix);
+    readOverrides("unevenNoResultProbabilityByKalshiPrefix", config.matcher.unevenNoResultProbabilityByKalshiPrefix);
 
     const auto arbitrage = sectionOf(document, "arbitrage");
     readInto(arbitrage, "minimumEdgeTicks", config.engine.minimumEdgeTicks);
@@ -167,6 +172,7 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readInto(discovery, "maximumMinutesBeforeStreaming", config.maximumMinutesBeforeStreaming);
     readInto(discovery, "pairsBetweenStreamRestarts", config.pairsBetweenStreamRestarts);
     readInto(discovery, "minimumMinutesBetweenStreamRestarts", config.minimumMinutesBetweenStreamRestarts);
+    readInto(discovery, "fullPolymarketCatalogEveryCycles", config.fullPolymarketCatalogEveryCycles);
 
     const auto logging = sectionOf(document, "logging");
     readPathInto(logging, "directory", config.logDirectory);

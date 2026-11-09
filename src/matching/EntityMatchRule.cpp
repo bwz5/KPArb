@@ -3,6 +3,7 @@
 #include "matching/CandidateFinder.h"
 
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <unordered_map>
 
@@ -15,6 +16,7 @@ constexpr std::int64_t secondsPerDay = 86'400;
 constexpr std::int64_t secondsPerHour = 3'600;
 constexpr std::int64_t maximumStartDifferenceSeconds = 3 * secondsPerHour;
 constexpr std::size_t winnerMarketsPerEvent = 2;
+constexpr double lineTolerance = 1e-6;
 
 std::int64_t daysFromCivil(std::int64_t year, std::int64_t month, std::int64_t day) noexcept
 {
@@ -158,6 +160,60 @@ std::optional<std::int64_t> polymarketSlugDay(std::string_view slug) noexcept
     return validDay(*year, *month, *day);
 }
 
+std::optional<std::int64_t> polymarketDayInSlug(std::string_view slug) noexcept
+{
+    constexpr std::size_t dateLength = 10;
+    for (std::size_t start = 0; start + dateLength <= slug.size(); ++start) {
+        const std::string_view candidate = slug.substr(start, dateLength);
+        if (candidate[4] != '-' || candidate[7] != '-' || (start > 0 && slug[start - 1] != '-')
+            || (start + dateLength < slug.size() && slug[start + dateLength] != '-')) {
+            continue;
+        }
+        const auto year = readNumber(candidate.substr(0, 4));
+        const auto month = readNumber(candidate.substr(5, 2));
+        const auto day = readNumber(candidate.substr(8, 2));
+        if (year && month && day) {
+            return validDay(*year, *month, *day);
+        }
+    }
+    return std::nullopt;
+}
+
+bool isEntityResolvedLine(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept
+{
+    const std::string& type = kalshiMarket.marketType;
+    const bool isSpread = endsWith(type, "spread");
+    const bool isTeamTotal = endsWith(type, "team_total");
+    const bool isTotal = endsWith(type, "total") && !isTeamTotal;
+    if ((!isSpread && !isTeamTotal && !isTotal) || type != polymarketMarket.marketType) {
+        return false;
+    }
+    if (!kalshiMarket.hasStrike || !kalshiMarket.isStrikeFloor || !polymarketMarket.hasStrike
+        || std::fabs(kalshiMarket.strike - polymarketMarket.strike) > lineTolerance) {
+        return false;
+    }
+    if (kalshiMarket.teamKeys.size() != 2 || kalshiMarket.teamKeys != polymarketMarket.teamKeys) {
+        return false;
+    }
+    const auto kalshiDay = kalshiTickerDay(kalshiMarket.identifier);
+    const auto polymarketDay = polymarketDayInSlug(polymarketMarket.eventIdentifier);
+    if (!kalshiDay || !polymarketDay || std::llabs(*kalshiDay - *polymarketDay) > maximumDayDifference) {
+        return false;
+    }
+    if (isSpread) {
+        return polymarketMarket.signedLine < 0.0 && !kalshiMarket.subjectTeamKey.empty()
+            && polymarketMarket.yesOutcomeEntityKey == kalshiMarket.subjectTeamKey
+            && polymarketMarket.noOutcomeEntityKey != kalshiMarket.subjectTeamKey && !polymarketMarket.noOutcomeEntityKey.empty();
+    }
+    if (polymarketMarket.yesOutcomeName != "Over" || polymarketMarket.noOutcomeName != "Under") {
+        return false;
+    }
+    if (isTeamTotal) {
+        return !kalshiMarket.subjectTeamKey.empty() && polymarketMarket.subjectTeamKey == kalshiMarket.subjectTeamKey;
+    }
+    return true;
+}
+
 std::unordered_set<std::string> kalshiEventsWithTieMarket(const std::vector<MarketInfo>& kalshiMarkets)
 {
     std::unordered_set<std::string> events;
@@ -213,13 +269,17 @@ std::vector<bool> findEntityRuleMatches(const std::vector<MarketInfo>& kalshiMar
     std::unordered_map<std::size_t, std::size_t> matchesPerKalshiMarket;
     std::unordered_map<std::string, std::size_t> matchesPerPolymarketSubject;
     const auto subjectKeyOf = [&](std::size_t index) {
-        return std::to_string(candidates[index].polymarketIndex) + "|" + kalshiMarkets[candidates[index].kalshiIndex].subjectTeamKey;
+        const MarketInfo& kalshiMarket = kalshiMarkets[candidates[index].kalshiIndex];
+        return std::to_string(candidates[index].polymarketIndex) + "|" + kalshiMarket.subjectTeamKey + "|" + kalshiMarket.marketType + "|"
+            + std::to_string(kalshiMarket.strike);
     };
     for (std::size_t index = 0; index < candidates.size(); ++index) {
         const MarketInfo& kalshiMarket = kalshiMarkets[candidates[index].kalshiIndex];
         const bool hasTie = eventsWithTie.contains(kalshiMarket.eventIdentifier);
+        const MarketInfo& polymarketMarket = polymarketMarkets[candidates[index].polymarketIndex];
         const bool isTwoMarketEvent = marketsPerEvent[kalshiMarket.eventIdentifier] == winnerMarketsPerEvent;
-        if (isTwoMarketEvent && isEntityResolvedMoneyline(kalshiMarket, polymarketMarkets[candidates[index].polymarketIndex], hasTie)) {
+        const bool isWinnerMatch = isTwoMarketEvent && isEntityResolvedMoneyline(kalshiMarket, polymarketMarket, hasTie);
+        if (isWinnerMatch || isEntityResolvedLine(kalshiMarket, polymarketMarket)) {
             matches[index] = true;
             ++matchesPerKalshiMarket[candidates[index].kalshiIndex];
             ++matchesPerPolymarketSubject[subjectKeyOf(index)];
@@ -247,7 +307,9 @@ MatchVerdict entityRuleVerdict(const MarketInfo& kalshiMarket, const MarketInfo&
     verdict.isSameEvent = true;
     verdict.isInverted = entityPolarity(kalshiMarket, polymarketMarket) == EntityPolarity::Inverted;
     verdict.confidence = 1.0;
-    verdict.reason = "Both venues name the same two teams on the same date in a two-way winner market";
+    verdict.reason = isEntityResolvedLine(kalshiMarket, polymarketMarket)
+        ? "Both venues name the same teams, date, market type and line, with the same side as YES"
+        : "Both venues name the same two teams on the same date in a two-way winner market";
     verdict.model = "entity-rule";
     return verdict;
 }

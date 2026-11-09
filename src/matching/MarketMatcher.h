@@ -32,6 +32,8 @@ struct MatcherSettings {
     std::vector<std::string> excludedKalshiTickerPrefixes{"KXCS2", "KXDOTA2", "KXCODGAME", "KXR6GAME", "KXLOL", "KXVALORANT"};
     double defaultNoResultProbability = 0.005;
     std::vector<std::pair<std::string, double>> noResultProbabilityByKalshiPrefix{{"KXATP", 0.02}, {"KXWTA", 0.02}, {"KXITF", 0.03}};
+    double defaultUnevenNoResultProbability = 0.005;
+    std::vector<std::pair<std::string, double>> unevenNoResultProbabilityByKalshiPrefix;
 };
 
 struct MatcherProgress {
@@ -85,7 +87,7 @@ private:
     bool waitUnlessStopped(std::int64_t seconds);
     bool isExcludedSeries(const std::string& kalshiTicker) const noexcept;
     void priceNoResultRisk(MatchedPair& pair, const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) const;
-    double noResultProbabilityFor(const std::string& kalshiTicker) const noexcept;
+    double noResultProbabilityFor(const std::string& kalshiTicker, bool polymarketPaysEven) const noexcept;
     void logEvent(MatchEventCode code, std::int64_t first = 0, std::int64_t second = 0, std::int64_t third = 0) noexcept;
     static MatchedPair makePair(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket, bool isInverted, double confidence);
 

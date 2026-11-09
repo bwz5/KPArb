@@ -177,6 +177,58 @@ TEST_F(MarketMatcherTest, EntityResolvedMoneylinesSkipTheLanguageModel)
     EXPECT_EQ(store->findVerdict(kalshiGames[0].identifier, polymarketGame.identifier)->model, "entity-rule");
 }
 
+MarketInfo lineMarket(Venue venue, std::string identifier, std::string eventIdentifier, std::string type, double strike)
+{
+    MarketInfo info = market(venue, std::move(identifier), "line market");
+    info.eventIdentifier = std::move(eventIdentifier);
+    info.marketType = std::move(type);
+    info.strike = strike;
+    info.hasStrike = true;
+    info.teamKeys = {"nba:PHX", "nba:SAS"};
+    return info;
+}
+
+TEST(EntityMatchRuleTest, SpreadsAndTotalsMatchByTeamsDateTypeAndLine)
+{
+    MarketInfo kalshiSpread = lineMarket(Venue::Kalshi, "KXNBASPREAD-26NOV09SASPHX-SAS32", "KXNBASPREAD-26NOV09SASPHX", "spread", spreadLine);
+    kalshiSpread.isStrikeFloor = true;
+    kalshiSpread.subjectTeamKey = "nba:SAS";
+    MarketInfo polymarketSpread = lineMarket(Venue::Polymarket, "0xspread", "nba-sas-phx-2026-11-09-spread-away-31pt5", "spread", spreadLine);
+    polymarketSpread.signedLine = -spreadLine;
+    polymarketSpread.yesOutcomeEntityKey = "nba:SAS";
+    polymarketSpread.noOutcomeEntityKey = "nba:PHX";
+    EXPECT_TRUE(isEntityResolvedLine(kalshiSpread, polymarketSpread));
+
+    MarketInfo underdogSide = polymarketSpread;
+    underdogSide.yesOutcomeEntityKey = "nba:PHX";
+    underdogSide.noOutcomeEntityKey = "nba:SAS";
+    EXPECT_FALSE(isEntityResolvedLine(kalshiSpread, underdogSide));
+    MarketInfo otherLine = polymarketSpread;
+    otherLine.strike = otherSpreadLine;
+    EXPECT_FALSE(isEntityResolvedLine(kalshiSpread, otherLine));
+    MarketInfo otherDay = polymarketSpread;
+    otherDay.eventIdentifier = "nba-sas-phx-2026-11-14-spread-away-31pt5";
+    EXPECT_FALSE(isEntityResolvedLine(kalshiSpread, otherDay));
+    MarketInfo firstHalf = polymarketSpread;
+    firstHalf.marketType = "first_half_spread";
+    EXPECT_FALSE(isEntityResolvedLine(kalshiSpread, firstHalf));
+
+    MarketInfo kalshiTeamTotal = lineMarket(Venue::Kalshi, "KXNBATEAMTOTAL-26NOV09SASPHX-SAS121", "KXNBATEAMTOTAL-26NOV09SASPHX", "team_total", teamTotalLine);
+    kalshiTeamTotal.isStrikeFloor = true;
+    kalshiTeamTotal.subjectTeamKey = "nba:SAS";
+    MarketInfo polymarketTeamTotal = lineMarket(Venue::Polymarket, "0xtotal", "nba-sas-phx-2026-11-09-team-total-sas-120pt5", "team_total", teamTotalLine);
+    polymarketTeamTotal.yesOutcomeName = "Over";
+    polymarketTeamTotal.noOutcomeName = "Under";
+    polymarketTeamTotal.subjectTeamKey = "nba:SAS";
+    EXPECT_TRUE(isEntityResolvedLine(kalshiTeamTotal, polymarketTeamTotal));
+    polymarketTeamTotal.subjectTeamKey = "nba:PHX";
+    EXPECT_FALSE(isEntityResolvedLine(kalshiTeamTotal, polymarketTeamTotal));
+    kalshiTeamTotal.isStrikeFloor = false;
+    polymarketTeamTotal.subjectTeamKey = "nba:SAS";
+    EXPECT_FALSE(isEntityResolvedLine(kalshiTeamTotal, polymarketTeamTotal));
+    EXPECT_EQ(polymarketDayInSlug("nba-sas-phx-2026-11-09-team-total-sas-120pt5"), kalshiTickerDay("KXNBATEAMTOTAL-26NOV09SASPHX"));
+}
+
 TEST(EntityMatchRuleTest, ExactScoreMarketsAreNotWinnerMarkets)
 {
     std::vector<MarketInfo> kalshiScores;
@@ -216,7 +268,7 @@ TEST_F(MarketMatcherTest, SettlementConflictsAreRejectedAndNoResultRiskIsPriced)
         MarketMatcher matcher(settings, model, *store, *channel);
         const auto pairs = matcher.match({kalshiGame}, {polymarketGame});
         ASSERT_EQ(pairs.size(), 1U);
-        EXPECT_DOUBLE_EQ(pairs[0].noResultProbability, settings.defaultNoResultProbability);
+        EXPECT_DOUBLE_EQ(pairs[0].noResultProbability, settings.defaultUnevenNoResultProbability);
         EXPECT_DOUBLE_EQ(pairs[0].polymarketYesNoResultValue, fiftyFiftyNoResultValue);
     }
     polymarketGame.title = "Penn Quakers vs. Illinois Fighting Illini - 1st Half Winner";

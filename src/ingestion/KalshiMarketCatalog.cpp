@@ -58,6 +58,7 @@ void readStrike(const nlohmann::json& market, MarketInfo& info)
     const std::string strikeType = readString(market, "strike_type");
     if (strikeType == "greater" || strikeType == "greater_or_equal") {
         info.hasStrike = readNumber(market, "floor_strike", info.strike);
+        info.isStrikeFloor = info.hasStrike && strikeType == "greater";
     } else if (strikeType == "less" || strikeType == "less_or_equal") {
         info.hasStrike = readNumber(market, "cap_strike", info.strike);
     }

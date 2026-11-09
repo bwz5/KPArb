@@ -20,6 +20,10 @@ std::int64_t easternDay(std::int64_t utcSeconds) noexcept;
 
 std::unordered_set<std::string> kalshiEventsWithTieMarket(const std::vector<MarketInfo>& kalshiMarkets);
 
+std::optional<std::int64_t> polymarketDayInSlug(std::string_view slug) noexcept;
+
+bool isEntityResolvedLine(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket) noexcept;
+
 bool isEntityResolvedMoneyline(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket, bool kalshiEventHasTie) noexcept;
 
 std::vector<bool> findEntityRuleMatches(const std::vector<MarketInfo>& kalshiMarkets, const std::vector<MarketInfo>& polymarketMarkets,

@@ -40,6 +40,7 @@ struct ApplicationConfig {
     std::int64_t maximumMinutesBeforeStreaming = 5;
     std::size_t pairsBetweenStreamRestarts = 25;
     std::int64_t minimumMinutesBetweenStreamRestarts = 10;
+    std::size_t fullPolymarketCatalogEveryCycles = 6;
 
     EngineSettings engine;
     double kalshiTakerFeeRate = 0.07;

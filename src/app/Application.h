@@ -75,6 +75,8 @@ private:
     ApplicationConfig config;
     RunOptions options;
     std::unique_ptr<ExposureBook> exposure;
+    std::vector<MarketInfo> cachedOtherPolymarketMarkets;
+    std::size_t discoveriesSinceFullSweep = 0;
 };
 
 }

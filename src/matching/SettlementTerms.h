@@ -21,6 +21,7 @@ struct SettlementComparison {
     bool isCompatible = true;
     std::string conflict;
     bool carriesNoResultRisk = false;
+    bool polymarketPaysEvenOnNoResult = false;
     double polymarketYesNoResultValue = 0.0;
     double polymarketNoNoResultValue = 0.0;
 };

@@ -42,7 +42,8 @@
     "pairsBeforeStreaming": 500,
     "maximumMinutesBeforeStreaming": 5,
     "pairsBetweenStreamRestarts": 25,
-    "minimumMinutesBetweenStreamRestarts": 10
+    "minimumMinutesBetweenStreamRestarts": 10,
+    "fullPolymarketCatalogEveryCycles": 6
   },
   "matching": {
     "candidatesPerMarket": 3,
@@ -65,7 +66,9 @@
     "sharedTeamBonus": 0.25,
     "excludedKalshiTickerPrefixes": ["KXCS2", "KXDOTA2", "KXCODGAME", "KXR6GAME", "KXLOL", "KXVALORANT"],
     "defaultNoResultProbability": 0.005,
-    "noResultProbabilityByKalshiPrefix": {"KXATP": 0.02, "KXWTA": 0.02, "KXITF": 0.03}
+    "noResultProbabilityByKalshiPrefix": {"KXATP": 0.02, "KXWTA": 0.02, "KXITF": 0.03},
+    "defaultUnevenNoResultProbability": 0.005,
+    "unevenNoResultProbabilityByKalshiPrefix": {}
   },
   "arbitrage": {
     "minimumEdgeTicks": 5,

@@ -142,7 +142,8 @@ PolymarketPage parsePolymarketMarketsPage(std::string_view body, std::vector<Mar
         info.marketType = polymarketMarketType(readString(market, "sportsMarketType"));
         const auto line = market.find("line");
         if (line != market.end() && line->is_number()) {
-            info.strike = std::fabs(line->get<double>());
+            info.signedLine = line->get<double>();
+            info.strike = std::fabs(info.signedLine);
             info.hasStrike = true;
         }
         info.yesOutcomeName = outcomes[0];
