@@ -1,5 +1,6 @@
 #include "TestConstants.h"
 #include "matching/ChatCompletionsClient.h"
+#include "matching/EntityMatchRule.h"
 #include "matching/MarketMatcher.h"
 
 #include <gtest/gtest.h>
@@ -140,35 +141,69 @@ TEST_F(MarketMatcherTest, OutcomeEntitiesDecidePolarityOverTheLanguageModel)
     EXPECT_EQ(entityPolarity(kalshiGames[0], yesNoMarket), EntityPolarity::Aligned);
 }
 
-TEST_F(MarketMatcherTest, EntityResolvedMoneylinesSkipTheLanguageModel)
+MarketInfo pennIllinoisMarket(const std::string& code, const std::string& title)
 {
-    store->load();
-    MarketInfo kalshiGame = market(Venue::Kalshi, "KXNCAAMBGAME-26NOV05PENNILL-ILL", "Illinois Fighting Illini wins");
+    MarketInfo kalshiGame = market(Venue::Kalshi, "KXNCAAMBGAME-26NOV05PENNILL-" + code, title);
     kalshiGame.eventIdentifier = "KXNCAAMBGAME-26NOV05PENNILL";
     kalshiGame.teamKeys = {"cbb:ILL", "cbb:PENN"};
-    kalshiGame.subjectTeamKey = "cbb:ILL";
+    kalshiGame.subjectTeamKey = "cbb:" + code;
+    return kalshiGame;
+}
+
+MarketInfo pennIllinoisPolymarket()
+{
     MarketInfo polymarketGame = market(Venue::Polymarket, "0xgame", "Penn Quakers vs. Illinois Fighting Illini");
     polymarketGame.eventIdentifier = "cbb-penn-ill-2026-11-05";
     polymarketGame.teamKeys = {"cbb:ILL", "cbb:PENN"};
     polymarketGame.yesOutcomeEntityKey = "cbb:PENN";
     polymarketGame.noOutcomeEntityKey = "cbb:ILL";
+    return polymarketGame;
+}
+
+TEST_F(MarketMatcherTest, EntityResolvedMoneylinesSkipTheLanguageModel)
+{
+    store->load();
+    const std::vector<MarketInfo> kalshiGames{pennIllinoisMarket("ILL", "Illinois Fighting Illini wins"), pennIllinoisMarket("PENN", "Penn Quakers wins")};
+    const MarketInfo polymarketGame = pennIllinoisPolymarket();
     settings.candidates.minimumSimilarity = noSimilarityRequired;
     MarketMatcher matcher(settings, model, *store, *channel);
-    const auto pairs = matcher.match({kalshiGame}, {polymarketGame});
-    ASSERT_EQ(pairs.size(), 1U);
-    EXPECT_TRUE(pairs[0].isInverted);
+    const auto pairs = matcher.match(kalshiGames, {polymarketGame});
+    ASSERT_EQ(pairs.size(), twoCandidates);
+    const auto illinois = std::find_if(pairs.begin(), pairs.end(), [](const MatchedPair& pair) { return pair.kalshiTicker.ends_with("-ILL"); });
+    ASSERT_NE(illinois, pairs.end());
+    EXPECT_TRUE(illinois->isInverted);
     EXPECT_EQ(model.requestCount, 0);
-    EXPECT_EQ(matcher.lastProgress().entityRuleMatches, 1U);
-    EXPECT_EQ(store->findVerdict(kalshiGame.identifier, polymarketGame.identifier)->model, "entity-rule");
+    EXPECT_EQ(matcher.lastProgress().entityRuleMatches, twoCandidates);
+    EXPECT_EQ(store->findVerdict(kalshiGames[0].identifier, polymarketGame.identifier)->model, "entity-rule");
+}
+
+TEST(EntityMatchRuleTest, ExactScoreMarketsAreNotWinnerMarkets)
+{
+    std::vector<MarketInfo> kalshiScores;
+    for (const char* code : {"ILL20", "ILL21", "PENN20", "PENN21"}) {
+        MarketInfo score = pennIllinoisMarket(code, "exact score");
+        score.subjectTeamKey = std::string(code).starts_with("ILL") ? "cbb:ILL" : "cbb:PENN";
+        kalshiScores.push_back(score);
+    }
+    const std::vector<MarketInfo> polymarketGames{pennIllinoisPolymarket()};
+    std::vector<CandidatePair> candidates;
+    for (std::size_t index = 0; index < kalshiScores.size(); ++index) {
+        candidates.push_back(CandidatePair{index, 0, perfectScore, 0});
+    }
+    for (const bool isMatch : findEntityRuleMatches(kalshiScores, polymarketGames, candidates)) {
+        EXPECT_FALSE(isMatch);
+    }
+    const std::vector<CandidatePair> twoCandidatePairs{{0, 0, perfectScore, 0}, {1, 0, perfectScore, 0}};
+    const std::vector<MarketInfo> sameSubject{kalshiScores[0], kalshiScores[1]};
+    for (const bool isMatch : findEntityRuleMatches(sameSubject, polymarketGames, twoCandidatePairs)) {
+        EXPECT_FALSE(isMatch);
+    }
 }
 
 TEST_F(MarketMatcherTest, SettlementConflictsAreRejectedAndNoResultRiskIsPriced)
 {
     store->load();
-    MarketInfo kalshiGame = market(Venue::Kalshi, "KXNCAAMBGAME-26NOV05PENNILL-ILL", "Illinois Fighting Illini wins");
-    kalshiGame.eventIdentifier = "KXNCAAMBGAME-26NOV05PENNILL";
-    kalshiGame.teamKeys = {"cbb:ILL", "cbb:PENN"};
-    kalshiGame.subjectTeamKey = "cbb:ILL";
+    MarketInfo kalshiGame = pennIllinoisMarket("ILL", "Illinois Fighting Illini wins");
     kalshiGame.rules = "If the game is cancelled or not started within 48 hours, both markets will resolve to a fair price.";
     MarketInfo polymarketGame = market(Venue::Polymarket, "0xgame", "Penn Quakers vs. Illinois Fighting Illini");
     polymarketGame.eventIdentifier = "cbb-penn-ill-2026-11-05";

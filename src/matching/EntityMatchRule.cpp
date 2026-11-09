@@ -14,6 +14,7 @@ constexpr std::int64_t maximumDayDifference = 1;
 constexpr std::int64_t secondsPerDay = 86'400;
 constexpr std::int64_t secondsPerHour = 3'600;
 constexpr std::int64_t maximumStartDifferenceSeconds = 3 * secondsPerHour;
+constexpr std::size_t winnerMarketsPerEvent = 2;
 
 std::int64_t daysFromCivil(std::int64_t year, std::int64_t month, std::int64_t day) noexcept
 {
@@ -204,18 +205,29 @@ std::vector<bool> findEntityRuleMatches(const std::vector<MarketInfo>& kalshiMar
     const std::vector<CandidatePair>& candidates)
 {
     const std::unordered_set<std::string> eventsWithTie = kalshiEventsWithTieMarket(kalshiMarkets);
+    std::unordered_map<std::string, std::size_t> marketsPerEvent;
+    for (const MarketInfo& market : kalshiMarkets) {
+        ++marketsPerEvent[market.eventIdentifier];
+    }
     std::vector<bool> matches(candidates.size(), false);
     std::unordered_map<std::size_t, std::size_t> matchesPerKalshiMarket;
+    std::unordered_map<std::string, std::size_t> matchesPerPolymarketSubject;
+    const auto subjectKeyOf = [&](std::size_t index) {
+        return std::to_string(candidates[index].polymarketIndex) + "|" + kalshiMarkets[candidates[index].kalshiIndex].subjectTeamKey;
+    };
     for (std::size_t index = 0; index < candidates.size(); ++index) {
         const MarketInfo& kalshiMarket = kalshiMarkets[candidates[index].kalshiIndex];
         const bool hasTie = eventsWithTie.contains(kalshiMarket.eventIdentifier);
-        if (isEntityResolvedMoneyline(kalshiMarket, polymarketMarkets[candidates[index].polymarketIndex], hasTie)) {
+        const bool isTwoMarketEvent = marketsPerEvent[kalshiMarket.eventIdentifier] == winnerMarketsPerEvent;
+        if (isTwoMarketEvent && isEntityResolvedMoneyline(kalshiMarket, polymarketMarkets[candidates[index].polymarketIndex], hasTie)) {
             matches[index] = true;
             ++matchesPerKalshiMarket[candidates[index].kalshiIndex];
+            ++matchesPerPolymarketSubject[subjectKeyOf(index)];
         }
     }
     for (std::size_t index = 0; index < candidates.size(); ++index) {
-        if (matches[index] && matchesPerKalshiMarket[candidates[index].kalshiIndex] != 1) {
+        if (matches[index]
+            && (matchesPerKalshiMarket[candidates[index].kalshiIndex] != 1 || matchesPerPolymarketSubject[subjectKeyOf(index)] != 1)) {
             matches[index] = false;
         }
     }
