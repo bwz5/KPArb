@@ -42,6 +42,7 @@ struct LogChannels {
     LogChannel& kalshiFeed;
     LogChannel& polymarketFeed;
     LogChannel& matcher;
+    LogChannel& discovery;
 };
 
 struct DiscoveredMarkets {

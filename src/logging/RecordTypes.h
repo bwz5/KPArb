@@ -14,6 +14,7 @@ enum class SourceIdentifier : std::uint16_t {
     KalshiFeed = 2,
     PolymarketFeed = 3,
     Matcher = 4,
+    Discovery = 5,
 };
 
 enum class PairNameField : std::uint8_t {
