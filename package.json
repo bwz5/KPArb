@@ -4,7 +4,8 @@
   "private": true,
   "description": "Local dashboard for the KPArb arbitrage bot: paper P&L, feed health, opportunities and execution",
   "scripts": {
-    "start": "node dashboard/server.js"
+    "start": "node dashboard/server.js",
+    "watchdog": "node dashboard/watchdog.js"
   },
   "engines": {
     "node": ">=18"
