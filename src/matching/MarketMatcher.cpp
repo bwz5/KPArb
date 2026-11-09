@@ -297,6 +297,12 @@ void MarketMatcher::processPendingCandidates(MatchRun& run, const std::vector<st
     }
 }
 
+bool MarketMatcher::isExcludedSeries(const std::string& kalshiTicker) const noexcept
+{
+    return std::any_of(settings.excludedKalshiTickerPrefixes.begin(), settings.excludedKalshiTickerPrefixes.end(),
+        [&kalshiTicker](const std::string& prefix) { return kalshiTicker.starts_with(prefix); });
+}
+
 std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kalshiMarkets, const std::vector<MarketInfo>& polymarketMarkets,
     const ProgressCallback& onProgress, const PairCallback& onPairAccepted)
 {
@@ -316,6 +322,11 @@ std::vector<MatchedPair> MarketMatcher::match(const std::vector<MarketInfo>& kal
         const MarketInfo& polymarketMarket = polymarketMarkets[candidate.polymarketIndex];
         if (store.isManuallyExcluded(kalshiMarket.identifier, polymarketMarket.identifier)) {
             ++progress.candidatesProcessed;
+            continue;
+        }
+        if (isExcludedSeries(kalshiMarket.identifier)) {
+            ++progress.candidatesProcessed;
+            ++progress.excludedBySeries;
             continue;
         }
         std::optional<MatchVerdict> verdict = store.findVerdict(kalshiMarket.identifier, polymarketMarket.identifier);

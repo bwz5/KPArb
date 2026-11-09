@@ -61,7 +61,8 @@
     "manualMatchesPath": "data/manual_matches.json",
     "matchedPairsPath": "data/matched_pairs.json",
     "entitiesPath": "config/entities.json",
-    "sharedTeamBonus": 0.25
+    "sharedTeamBonus": 0.25,
+    "excludedKalshiTickerPrefixes": ["KXCS2", "KXDOTA2", "KXCODGAME", "KXR6GAME", "KXLOL", "KXVALORANT"]
   },
   "arbitrage": {
     "minimumEdgeTicks": 5,

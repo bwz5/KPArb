@@ -28,6 +28,7 @@ struct MatcherSettings {
     std::size_t maximumRulesCharacters = 800;
     std::size_t maximumConsecutiveFailures = 5;
     std::int64_t maximumQuotaWaitSeconds = 900;
+    std::vector<std::string> excludedKalshiTickerPrefixes{"KXCS2", "KXDOTA2", "KXCODGAME", "KXR6GAME", "KXLOL", "KXVALORANT"};
 };
 
 struct MatcherProgress {
@@ -38,6 +39,7 @@ struct MatcherProgress {
     std::size_t quotaWaits = 0;
     std::size_t polarityCorrections = 0;
     std::size_t entityRuleMatches = 0;
+    std::size_t excludedBySeries = 0;
     bool isLanguageModelDisabled = false;
 };
 
@@ -77,6 +79,7 @@ private:
     void acceptIfMatched(MatchRun& run, const CandidatePair& candidate, const MatchVerdict& verdict);
     void reportProgress(MatchRun& run, const CandidatePair& candidate, const MatchVerdict& verdict);
     bool waitUnlessStopped(std::int64_t seconds);
+    bool isExcludedSeries(const std::string& kalshiTicker) const noexcept;
     void logEvent(MatchEventCode code, std::int64_t first = 0, std::int64_t second = 0, std::int64_t third = 0) noexcept;
     static MatchedPair makePair(const MarketInfo& kalshiMarket, const MarketInfo& polymarketMarket, bool isInverted, double confidence);
 

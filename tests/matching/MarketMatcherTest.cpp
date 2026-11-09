@@ -162,6 +162,30 @@ TEST_F(MarketMatcherTest, EntityResolvedMoneylinesSkipTheLanguageModel)
     EXPECT_EQ(store->findVerdict(kalshiGame.identifier, polymarketGame.identifier)->model, "entity-rule");
 }
 
+TEST_F(MarketMatcherTest, ExcludedSeriesAreNeverMatched)
+{
+    store->load();
+    MarketInfo kalshiGame = market(Venue::Kalshi, "KXCS2GAME-26NOV061500YOULOW-LOW", "Low Cortisol wins");
+    kalshiGame.eventIdentifier = "KXCS2GAME-26NOV061500YOULOW";
+    kalshiGame.teamKeys = {"cs2:LOW", "cs2:YOU"};
+    kalshiGame.subjectTeamKey = "cs2:LOW";
+    MarketInfo polymarketGame = market(Venue::Polymarket, "0xcs2", "Counter-Strike: your end vs Low Cortisol");
+    polymarketGame.eventIdentifier = "cs2-you-low-2026-11-06";
+    polymarketGame.teamKeys = {"cs2:LOW", "cs2:YOU"};
+    polymarketGame.yesOutcomeEntityKey = "cs2:YOU";
+    polymarketGame.noOutcomeEntityKey = "cs2:LOW";
+    settings.candidates.minimumSimilarity = noSimilarityRequired;
+    MarketMatcher matcher(settings, model, *store, *channel);
+    EXPECT_TRUE(matcher.match({kalshiGame}, {polymarketGame}).empty());
+    EXPECT_EQ(model.requestCount, 0);
+    EXPECT_EQ(matcher.lastProgress().excludedBySeries, 1U);
+    EXPECT_EQ(matcher.lastProgress().entityRuleMatches, 0U);
+
+    settings.excludedKalshiTickerPrefixes.clear();
+    MarketMatcher permissiveMatcher(settings, model, *store, *channel);
+    EXPECT_EQ(permissiveMatcher.match({kalshiGame}, {polymarketGame}).size(), 1U);
+}
+
 TEST_F(MarketMatcherTest, CachedVerdictsSkipTheLanguageModel)
 {
     store->load();

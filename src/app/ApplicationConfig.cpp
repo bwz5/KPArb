@@ -99,6 +99,7 @@ ApplicationConfig parseApplicationConfig(const std::string& json)
     readPathInto(matching, "matchedPairsPath", config.matchedPairsPath);
     readPathInto(matching, "entitiesPath", config.entitiesPath);
     readInto(matching, "sharedTeamBonus", config.matcher.candidates.sharedTeamBonus);
+    readInto(matching, "excludedKalshiTickerPrefixes", config.matcher.excludedKalshiTickerPrefixes);
 
     const auto arbitrage = sectionOf(document, "arbitrage");
     readInto(arbitrage, "minimumEdgeTicks", config.engine.minimumEdgeTicks);
